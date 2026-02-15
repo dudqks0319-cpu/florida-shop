@@ -3,6 +3,13 @@ import path from "path";
 
 export type ErrandStatus = "open" | "matched" | "in_progress" | "done" | "cancelled";
 
+export type Settlement = {
+  platformFeeKrw: number;
+  helperPayoutKrw: number;
+  status: "pending" | "paid";
+  settledAt?: string;
+};
+
 export type Errand = {
   id: string;
   title: string;
@@ -13,6 +20,7 @@ export type Errand = {
   apartment: string;
   status: ErrandStatus;
   helper?: string;
+  settlement?: Settlement;
   createdAt: string;
 };
 

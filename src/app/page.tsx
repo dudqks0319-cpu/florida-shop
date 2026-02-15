@@ -23,6 +23,12 @@ type Errand = {
   apartment: string;
   status: "open" | "matched" | "in_progress" | "done" | "cancelled";
   helper?: string;
+  settlement?: {
+    platformFeeKrw: number;
+    helperPayoutKrw: number;
+    status: "pending" | "paid";
+    settledAt?: string;
+  };
 };
 
 const categoryLabel = {
@@ -96,6 +102,21 @@ export default function Home() {
       body: JSON.stringify(patch),
     });
     await refresh();
+  };
+
+  const completeAndSettle = async (e: Errand) => {
+    const platformFeeKrw = Math.round(e.rewardKrw * 0.1); // 10% 수수료
+    const helperPayoutKrw = e.rewardKrw - platformFeeKrw;
+
+    await updateErrand(e.id, {
+      status: "done",
+      settlement: {
+        platformFeeKrw,
+        helperPayoutKrw,
+        status: "paid",
+        settledAt: new Date().toISOString(),
+      },
+    });
   };
 
   const lookupAddress = async () => {
@@ -278,6 +299,14 @@ export default function Home() {
               </p>
               <p style={{ color: "#64748b", marginTop: 4 }}>의뢰자: {e.requester}{e.helper ? ` / 수행자: ${e.helper}` : ""}</p>
 
+              {e.settlement && (
+                <div style={{ marginTop: 8, padding: 10, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10 }}>
+                  <p style={{ margin: 0, color: "#334155" }}>
+                    정산: 수행자 <b>{e.settlement.helperPayoutKrw.toLocaleString()}원</b> / 플랫폼 수수료 <b>{e.settlement.platformFeeKrw.toLocaleString()}원</b>
+                  </p>
+                </div>
+              )}
+
               <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                 {e.status === "open" && (
                   <button onClick={() => updateErrand(e.id, { status: "matched", helper: helperName || "근처도우미" })} style={secondaryBtn}>매칭</button>
@@ -286,7 +315,7 @@ export default function Home() {
                   <button onClick={() => updateErrand(e.id, { status: "in_progress" })} style={secondaryBtn}>진행 시작</button>
                 )}
                 {e.status === "in_progress" && (
-                  <button onClick={() => updateErrand(e.id, { status: "done" })} style={secondaryBtn}>완료 처리</button>
+                  <button onClick={() => completeAndSettle(e)} style={secondaryBtn}>완료 처리·정산</button>
                 )}
                 {e.status !== "done" && e.status !== "cancelled" && (
                   <button onClick={() => updateErrand(e.id, { status: "cancelled" })} style={dangerBtn}>취소</button>
