@@ -3,11 +3,12 @@ import { makeId, readDB, writeDB } from "@/lib/store";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
+  const requester = String(body?.requester || "").trim();
   const apartment = String(body?.apartment || "").trim();
   const dong = String(body?.dong || "").trim();
 
-  if (!apartment || !dong) {
-    return NextResponse.json({ error: "아파트명과 동네 정보가 필요합니다." }, { status: 400 });
+  if (!requester || !apartment || !dong) {
+    return NextResponse.json({ error: "이름, 아파트명, 동네 정보가 필요합니다." }, { status: 400 });
   }
 
   const db = await readDB();
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest) {
 
   db.verifications.unshift({
     id: requestId,
+    requester,
     apartment,
     dong,
     code,

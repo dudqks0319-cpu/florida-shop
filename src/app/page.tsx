@@ -29,6 +29,13 @@ type Errand = {
     status: "pending" | "paid";
     settledAt?: string;
   };
+  cancellation?: {
+    reason: string;
+    penaltyLevel: "none" | "medium";
+    requesterPenaltyKrw: number;
+    helperCompensationKrw: number;
+    decidedAt: string;
+  };
 };
 
 const categoryLabel = {
@@ -66,8 +73,10 @@ export default function Home() {
   const [verifyCode, setVerifyCode] = useState("");
   const [demoCode, setDemoCode] = useState("");
   const [verifiedDongne, setVerifiedDongne] = useState("");
+  const [verifiedRequestId, setVerifiedRequestId] = useState("");
 
   const openCount = useMemo(() => errands.filter((e) => e.status === "open").length, [errands]);
+  const totalPenalty = useMemo(() => errands.reduce((sum, e) => sum + (e.cancellation?.requesterPenaltyKrw ?? 0), 0), [errands]);
 
   const mapQuery = useMemo(() => {
     if (!selectedAddr) return "울산광역시";
@@ -86,11 +95,23 @@ export default function Home() {
 
   const createErrand = async () => {
     if (!form.title || !form.requester || !form.apartment) return;
-    await fetch("/api/errands", {
+    if (!verifiedRequestId) {
+      alert("동네 인증 완료 후 의뢰를 등록할 수 있어요.");
+      return;
+    }
+
+    const res = await fetch("/api/errands", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, verificationRequestId: verifiedRequestId }),
     });
+
+    if (!res.ok) {
+      const json = await res.json();
+      alert(json.error || "의뢰 등록 실패");
+      return;
+    }
+
     setForm({ ...form, title: "", detail: "", rewardKrw: 5000 });
     await refresh();
   };
@@ -135,14 +156,20 @@ export default function Home() {
       alert("먼저 주소/아파트를 선택해주세요.");
       return;
     }
+    if (!form.requester.trim()) {
+      alert("의뢰자 이름을 먼저 입력해주세요.");
+      return;
+    }
 
     const apartment = selectedAddr.bdNm || selectedAddr.roadAddr;
     const dong = `${selectedAddr.siNm} ${selectedAddr.sggNm} ${selectedAddr.emdNm}`.trim();
 
+    setForm((prev) => ({ ...prev, apartment }));
+
     const res = await fetch("/api/neighborhood/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apartment, dong }),
+      body: JSON.stringify({ requester: form.requester.trim(), apartment, dong }),
     });
     const json = await res.json();
     if (!res.ok) {
@@ -167,7 +194,8 @@ export default function Home() {
       return;
     }
     setVerifiedDongne(json.neighborhood || "인증완료");
-    alert("동네 인증 완료!");
+    setVerifiedRequestId(verifyRequestId);
+    alert("동네 인증 완료! 이제 의뢰 등록이 가능합니다.");
   };
 
   return (
@@ -178,7 +206,10 @@ export default function Home() {
       <section style={{ ...cardStyle, marginTop: 14 }}>
         <h3>동네 인증 (당근 스타일 데모)</h3>
         {verifiedDongne ? (
-          <p style={{ marginTop: 10, color: "#166534" }}>✅ 인증된 동네: <b>{verifiedDongne}</b></p>
+          <div style={{ marginTop: 10, color: "#166534" }}>
+            <p>✅ 인증된 동네: <b>{verifiedDongne}</b></p>
+            <p style={{ marginTop: 4, fontSize: 13 }}>인증 ID 연결 완료: <b>{verifiedRequestId}</b></p>
+          </div>
         ) : (
           <p style={{ marginTop: 10, color: "#64748b" }}>주소/아파트 검색 후 인증코드를 발급받아 동네를 인증하세요.</p>
         )}
@@ -251,14 +282,16 @@ export default function Home() {
             <li>총 의뢰: <b>{errands.length}건</b></li>
             <li>모집중: <b>{openCount}건</b></li>
             <li>완료: <b>{errands.filter((e) => e.status === "done").length}건</b></li>
+            <li>패널티 누적: <b>{totalPenalty.toLocaleString()}원</b></li>
           </ul>
         </div>
         <div style={cardStyle}>
           <h3>신뢰 규칙(초안)</h3>
           <ul style={{ marginLeft: 18, marginTop: 10 }}>
-            <li>건당 보상금 사전 표시</li>
-            <li>노쇼/취소 패널티 정책 적용</li>
-            <li>완료 확인 후 정산</li>
+            <li>건당 보상금 사전 표시 (3,000~100,000원)</li>
+            <li>중강도 패널티: 매칭 후 취소 최대 2,000원, 진행 중 취소 최대 3,000원</li>
+            <li>완료 확인 후 자동 정산(플랫폼 10%, 수행자 90%)</li>
+            <li>파일럿 1개 단지 외 의뢰 등록 제한</li>
           </ul>
         </div>
       </section>
@@ -279,7 +312,9 @@ export default function Home() {
           </select>
           <input placeholder="상세 내용" value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} style={inputStyle} />
         </div>
-        <button onClick={createErrand} style={primaryBtn}>의뢰 등록</button>
+        <button onClick={createErrand} style={{ ...primaryBtn, opacity: verifiedRequestId ? 1 : 0.7 }}>
+          {verifiedRequestId ? "의뢰 등록" : "동네 인증 후 의뢰 등록"}
+        </button>
       </section>
 
       <section style={{ ...cardStyle, marginTop: 14 }}>
@@ -303,6 +338,15 @@ export default function Home() {
                 <div style={{ marginTop: 8, padding: 10, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10 }}>
                   <p style={{ margin: 0, color: "#334155" }}>
                     정산: 수행자 <b>{e.settlement.helperPayoutKrw.toLocaleString()}원</b> / 플랫폼 수수료 <b>{e.settlement.platformFeeKrw.toLocaleString()}원</b>
+                  </p>
+                </div>
+              )}
+
+              {e.cancellation && (
+                <div style={{ marginTop: 8, padding: 10, background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 10 }}>
+                  <p style={{ margin: 0, color: "#9a3412" }}>
+                    취소정책: {e.cancellation.reason} · 패널티 <b>{e.cancellation.requesterPenaltyKrw.toLocaleString()}원</b>
+                    {e.cancellation.helperCompensationKrw > 0 ? ` (수행자 보상 ${e.cancellation.helperCompensationKrw.toLocaleString()}원)` : ""}
                   </p>
                 </div>
               )}
