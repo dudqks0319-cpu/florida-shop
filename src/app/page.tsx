@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import NaverMap from "@/components/NaverMap";
 
 type AddressItem = {
   roadAddr: string;
@@ -61,6 +62,11 @@ export default function Home() {
   const [verifiedDongne, setVerifiedDongne] = useState("");
 
   const openCount = useMemo(() => errands.filter((e) => e.status === "open").length, [errands]);
+
+  const mapQuery = useMemo(() => {
+    if (!selectedAddr) return "울산광역시";
+    return selectedAddr.roadAddr || selectedAddr.jibunAddr || `${selectedAddr.siNm} ${selectedAddr.sggNm} ${selectedAddr.emdNm}`;
+  }, [selectedAddr]);
 
   const refresh = async () => {
     const res = await fetch("/api/errands");
@@ -206,6 +212,14 @@ export default function Home() {
         <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
           <button onClick={issueNeighborhoodCode} style={secondaryBtn}>인증코드 발급</button>
           {demoCode && <span style={{ color: "#475569" }}>데모코드: <b>{demoCode}</b></span>}
+        </div>
+      </section>
+
+      <section style={{ ...cardStyle, marginTop: 14 }}>
+        <h3>네이버 지도</h3>
+        <p style={{ marginTop: 8, color: "#64748b" }}>선택한 주소를 지도에서 확인할 수 있어요.</p>
+        <div style={{ marginTop: 10 }}>
+          <NaverMap queryAddress={mapQuery} />
         </div>
       </section>
 
