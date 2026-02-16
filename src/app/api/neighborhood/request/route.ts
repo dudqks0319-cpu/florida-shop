@@ -24,15 +24,20 @@ export async function POST(req: NextRequest) {
     code,
     expiresAt,
     verified: false,
+    attempts: 0,
     createdAt: new Date().toISOString(),
   });
 
   await writeDB(db);
 
+  const allowDemoCode = process.env.ALLOW_DEMO_CODE === "true";
+
   return NextResponse.json({
     requestId,
-    message: "인증코드가 발급되었습니다. (MVP 데모에서는 코드가 바로 표시됩니다)",
-    demoCode: code,
+    message: allowDemoCode
+      ? "인증코드가 발급되었습니다. (데모 모드: 코드가 응답에 포함됩니다)"
+      : "인증코드가 발급되었습니다. 운영 모드에서는 코드가 응답에 노출되지 않습니다.",
+    ...(allowDemoCode ? { demoCode: code } : {}),
     expiresAt,
   });
 }

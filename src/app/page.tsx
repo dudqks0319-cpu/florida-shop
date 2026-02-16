@@ -74,6 +74,10 @@ export default function Home() {
   const [demoCode, setDemoCode] = useState("");
   const [verifiedDongne, setVerifiedDongne] = useState("");
   const [verifiedRequestId, setVerifiedRequestId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | Errand["status"]>("all");
+  const [searchKeyword, setSearchKeyword] = useState("");
 
   const openCount = useMemo(() => errands.filter((e) => e.status === "open").length, [errands]);
   const totalPenalty = useMemo(() => errands.reduce((sum, e) => sum + (e.cancellation?.requesterPenaltyKrw ?? 0), 0), [errands]);
@@ -82,6 +86,20 @@ export default function Home() {
     if (!selectedAddr) return "울산광역시";
     return selectedAddr.roadAddr || selectedAddr.jibunAddr || `${selectedAddr.siNm} ${selectedAddr.sggNm} ${selectedAddr.emdNm}`;
   }, [selectedAddr]);
+
+  const filteredErrands = useMemo(() => {
+    return errands.filter((e) => {
+      const byStatus = statusFilter === "all" || e.status === statusFilter;
+      const keyword = searchKeyword.trim().toLowerCase();
+      const byKeyword =
+        !keyword ||
+        e.title.toLowerCase().includes(keyword) ||
+        e.detail.toLowerCase().includes(keyword) ||
+        e.requester.toLowerCase().includes(keyword) ||
+        e.apartment.toLowerCase().includes(keyword);
+      return byStatus && byKeyword;
+    });
+  }, [errands, statusFilter, searchKeyword]);
 
   const refresh = async () => {
     const res = await fetch("/api/errands");
@@ -94,12 +112,16 @@ export default function Home() {
   }, []);
 
   const createErrand = async () => {
-    if (!form.title || !form.requester || !form.apartment) return;
+    if (!form.title || !form.requester || !form.apartment) {
+      setNotice({ type: "error", text: "제목/의뢰자/아파트를 모두 입력해주세요." });
+      return;
+    }
     if (!verifiedRequestId) {
-      alert("동네 인증 완료 후 의뢰를 등록할 수 있어요.");
+      setNotice({ type: "error", text: "동네 인증 완료 후 의뢰를 등록할 수 있어요." });
       return;
     }
 
+    setBusy(true);
     const res = await fetch("/api/errands", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -108,21 +130,32 @@ export default function Home() {
 
     if (!res.ok) {
       const json = await res.json();
-      alert(json.error || "의뢰 등록 실패");
+      setNotice({ type: "error", text: json.error || "의뢰 등록 실패" });
+      setBusy(false);
       return;
     }
 
     setForm({ ...form, title: "", detail: "", rewardKrw: 5000 });
+    setNotice({ type: "ok", text: "의뢰가 등록되었습니다." });
     await refresh();
+    setBusy(false);
   };
 
   const updateErrand = async (id: string, patch: Partial<Errand>) => {
-    await fetch(`/api/errands/${id}`, {
+    setBusy(true);
+    const res = await fetch(`/api/errands/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
+    if (!res.ok) {
+      const json = await res.json();
+      setNotice({ type: "error", text: json.error || "상태 변경 실패" });
+      setBusy(false);
+      return;
+    }
     await refresh();
+    setBusy(false);
   };
 
   const completeAndSettle = async (e: Errand) => {
@@ -141,23 +174,30 @@ export default function Home() {
   };
 
   const lookupAddress = async () => {
-    if (!addrKeyword.trim()) return;
+    if (!addrKeyword.trim()) {
+      setNotice({ type: "error", text: "검색어를 입력해주세요." });
+      return;
+    }
+    setBusy(true);
     const res = await fetch(`/api/address/lookup?keyword=${encodeURIComponent(addrKeyword)}`);
     const json = await res.json();
     if (!res.ok) {
-      alert(json.error || "주소 검색 실패");
+      setNotice({ type: "error", text: json.error || "주소 검색 실패" });
+      setBusy(false);
       return;
     }
     setAddrItems(json.items || []);
+    setNotice({ type: "ok", text: `주소 검색 결과 ${json.items?.length ?? 0}건` });
+    setBusy(false);
   };
 
   const issueNeighborhoodCode = async () => {
     if (!selectedAddr) {
-      alert("먼저 주소/아파트를 선택해주세요.");
+      setNotice({ type: "error", text: "먼저 주소/아파트를 선택해주세요." });
       return;
     }
     if (!form.requester.trim()) {
-      alert("의뢰자 이름을 먼저 입력해주세요.");
+      setNotice({ type: "error", text: "의뢰자 이름을 먼저 입력해주세요." });
       return;
     }
 
@@ -165,7 +205,7 @@ export default function Home() {
     const dong = `${selectedAddr.siNm} ${selectedAddr.sggNm} ${selectedAddr.emdNm}`.trim();
 
     setForm((prev) => ({ ...prev, apartment }));
-
+    setBusy(true);
     const res = await fetch("/api/neighborhood/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -173,16 +213,28 @@ export default function Home() {
     });
     const json = await res.json();
     if (!res.ok) {
-      alert(json.error || "인증코드 발급 실패");
+      setNotice({ type: "error", text: json.error || "인증코드 발급 실패" });
+      setBusy(false);
       return;
     }
 
     setVerifyRequestId(json.requestId);
     setDemoCode(json.demoCode || "");
-    alert(`인증코드가 발급되었습니다. (데모코드: ${json.demoCode})`);
+    setNotice({
+      type: "ok",
+      text: json.demoCode
+        ? `인증코드 발급 완료 (데모코드: ${json.demoCode})`
+        : "인증코드 발급 완료. 운영모드에서는 코드가 화면에 노출되지 않습니다.",
+    });
+    setBusy(false);
   };
 
   const verifyNeighborhood = async () => {
+    if (!verifyRequestId.trim() || !verifyCode.trim()) {
+      setNotice({ type: "error", text: "인증요청 ID와 인증코드를 입력해주세요." });
+      return;
+    }
+    setBusy(true);
     const res = await fetch("/api/neighborhood/verify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -190,18 +242,34 @@ export default function Home() {
     });
     const json = await res.json();
     if (!res.ok) {
-      alert(json.error || "동네 인증 실패");
+      setNotice({ type: "error", text: json.error || "동네 인증 실패" });
+      setBusy(false);
       return;
     }
     setVerifiedDongne(json.neighborhood || "인증완료");
     setVerifiedRequestId(verifyRequestId);
-    alert("동네 인증 완료! 이제 의뢰 등록이 가능합니다.");
+    setNotice({ type: "ok", text: "동네 인증 완료! 이제 의뢰 등록이 가능합니다." });
+    setBusy(false);
   };
 
   return (
     <main style={{ maxWidth: 1100, margin: "0 auto", padding: 20 }}>
       <h1 style={{ fontSize: 40, fontWeight: 800 }}>동네 건당 심부름</h1>
       <p style={{ color: "#64748b", marginTop: 8 }}>아파트 단지 기반으로 심부름을 올리고, 건당으로 매칭하는 MVP입니다.</p>
+      {notice && (
+        <div
+          style={{
+            marginTop: 10,
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: `1px solid ${notice.type === "ok" ? "#86efac" : "#fecaca"}`,
+            background: notice.type === "ok" ? "#f0fdf4" : "#fef2f2",
+            color: notice.type === "ok" ? "#166534" : "#991b1b",
+          }}
+        >
+          {notice.text}
+        </div>
+      )}
 
       <section style={{ ...cardStyle, marginTop: 14 }}>
         <h3>동네 인증 (당근 스타일 데모)</h3>
@@ -221,7 +289,7 @@ export default function Home() {
             onChange={(e) => setAddrKeyword(e.target.value)}
             style={inputStyle}
           />
-          <button onClick={lookupAddress} style={secondaryBtn}>검색</button>
+          <button disabled={busy} onClick={lookupAddress} style={secondaryBtn}>{busy ? "처리중..." : "검색"}</button>
         </div>
 
         {addrItems.length > 0 && (
@@ -258,11 +326,11 @@ export default function Home() {
             onChange={(e) => setVerifyCode(e.target.value)}
             style={inputStyle}
           />
-          <button onClick={verifyNeighborhood} style={primaryBtn}>인증 확인</button>
+          <button disabled={busy} onClick={verifyNeighborhood} style={primaryBtn}>{busy ? "확인중..." : "인증 확인"}</button>
         </div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
-          <button onClick={issueNeighborhoodCode} style={secondaryBtn}>인증코드 발급</button>
+          <button disabled={busy} onClick={issueNeighborhoodCode} style={secondaryBtn}>{busy ? "발급중..." : "인증코드 발급"}</button>
           {demoCode && <span style={{ color: "#475569" }}>데모코드: <b>{demoCode}</b></span>}
         </div>
       </section>
@@ -312,17 +380,39 @@ export default function Home() {
           </select>
           <input placeholder="상세 내용" value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} style={inputStyle} />
         </div>
-        <button onClick={createErrand} style={{ ...primaryBtn, opacity: verifiedRequestId ? 1 : 0.7 }}>
-          {verifiedRequestId ? "의뢰 등록" : "동네 인증 후 의뢰 등록"}
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          {[5000, 10000, 15000].map((v) => (
+            <button key={v} type="button" onClick={() => setForm((p) => ({ ...p, rewardKrw: v }))} style={secondaryBtn}>
+              {v.toLocaleString()}원
+            </button>
+          ))}
+        </div>
+        <button disabled={busy} onClick={createErrand} style={{ ...primaryBtn, opacity: verifiedRequestId ? 1 : 0.7 }}>
+          {busy ? "등록중..." : verifiedRequestId ? "의뢰 등록" : "동네 인증 후 의뢰 등록"}
         </button>
       </section>
 
       <section style={{ ...cardStyle, marginTop: 14 }}>
         <h3>의뢰 목록</h3>
-        <input placeholder="수행자 이름 입력(매칭할 때 사용)" value={helperName} onChange={(e) => setHelperName(e.target.value)} style={{ ...inputStyle, marginTop: 10, marginBottom: 10 }} />
-        <div style={{ display: "grid", gap: 10 }}>
-          {errands.length === 0 && <p>아직 의뢰가 없습니다.</p>}
-          {errands.map((e) => (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+          <input placeholder="수행자 이름 입력(매칭할 때 사용)" value={helperName} onChange={(e) => setHelperName(e.target.value)} style={inputStyle} />
+          <input placeholder="제목/아파트/의뢰자 검색" value={searchKeyword} onChange={(e) => setSearchKeyword(e.target.value)} style={inputStyle} />
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          {(["all", "open", "matched", "in_progress", "done", "cancelled"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              style={{ ...secondaryBtn, background: statusFilter === s ? "#dbeafe" : "#f8fafc" }}
+            >
+              {s === "all" ? "전체" : statusLabel[s]}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+          {filteredErrands.length === 0 && <p>조건에 맞는 의뢰가 없습니다.</p>}
+          {filteredErrands.map((e) => (
             <div key={e.id} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, background: "#fff" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                 <b>{e.title}</b>
@@ -353,16 +443,26 @@ export default function Home() {
 
               <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                 {e.status === "open" && (
-                  <button onClick={() => updateErrand(e.id, { status: "matched", helper: helperName || "근처도우미" })} style={secondaryBtn}>매칭</button>
+                  <button disabled={busy} onClick={() => updateErrand(e.id, { status: "matched", helper: helperName || "근처도우미" })} style={secondaryBtn}>매칭</button>
                 )}
                 {e.status === "matched" && (
-                  <button onClick={() => updateErrand(e.id, { status: "in_progress" })} style={secondaryBtn}>진행 시작</button>
+                  <button disabled={busy} onClick={() => updateErrand(e.id, { status: "in_progress" })} style={secondaryBtn}>진행 시작</button>
                 )}
                 {e.status === "in_progress" && (
-                  <button onClick={() => completeAndSettle(e)} style={secondaryBtn}>완료 처리·정산</button>
+                  <button disabled={busy} onClick={() => completeAndSettle(e)} style={secondaryBtn}>완료 처리·정산</button>
                 )}
                 {e.status !== "done" && e.status !== "cancelled" && (
-                  <button onClick={() => updateErrand(e.id, { status: "cancelled" })} style={dangerBtn}>취소</button>
+                  <button
+                    disabled={busy}
+                    onClick={() => {
+                      if (confirm("정말 취소하시겠어요? 상태에 따라 패널티가 적용될 수 있습니다.")) {
+                        updateErrand(e.id, { status: "cancelled" });
+                      }
+                    }}
+                    style={dangerBtn}
+                  >
+                    취소
+                  </button>
                 )}
               </div>
             </div>

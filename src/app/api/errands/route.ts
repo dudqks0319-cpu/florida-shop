@@ -3,6 +3,7 @@ import { makeId, readDB, writeDB } from "@/lib/store";
 
 const MIN_REWARD = 3000;
 const MAX_REWARD = 100000;
+const VALID_CATEGORIES = new Set(["convenience", "delivery", "bank", "admin", "etc"]);
 
 export async function GET() {
   const db = await readDB();
@@ -17,6 +18,8 @@ export async function POST(req: NextRequest) {
   const apartment = String(body?.apartment || "").trim();
   const rewardKrw = Number(body?.rewardKrw || 0);
   const verificationRequestId = String(body?.verificationRequestId || "").trim();
+  const detail = String(body?.detail || "").trim();
+  const category = String(body?.category || "etc").trim();
 
   if (!title || !requester || !apartment || !rewardKrw || !verificationRequestId) {
     return NextResponse.json({ error: "필수 항목(제목/의뢰자/아파트/금액/동네인증)이 비었습니다." }, { status: 400 });
@@ -24,8 +27,17 @@ export async function POST(req: NextRequest) {
   if (title.length > 80) {
     return NextResponse.json({ error: "제목은 80자 이내로 입력해주세요." }, { status: 400 });
   }
+  if (!Number.isInteger(rewardKrw)) {
+    return NextResponse.json({ error: "보상금은 정수(원 단위)로 입력해주세요." }, { status: 400 });
+  }
   if (rewardKrw < MIN_REWARD || rewardKrw > MAX_REWARD) {
     return NextResponse.json({ error: `보상금은 ${MIN_REWARD.toLocaleString()}원~${MAX_REWARD.toLocaleString()}원 사이여야 합니다.` }, { status: 400 });
+  }
+  if (detail.length > 500) {
+    return NextResponse.json({ error: "상세 내용은 500자 이내로 입력해주세요." }, { status: 400 });
+  }
+  if (!VALID_CATEGORIES.has(category)) {
+    return NextResponse.json({ error: "유효하지 않은 카테고리입니다." }, { status: 400 });
   }
 
   const db = await readDB();
@@ -52,8 +64,8 @@ export async function POST(req: NextRequest) {
   const errand = {
     id: makeId(),
     title,
-    detail: String(body.detail || ""),
-    category: (body.category || "etc") as "convenience" | "delivery" | "bank" | "admin" | "etc",
+    detail,
+    category: category as "convenience" | "delivery" | "bank" | "admin" | "etc",
     rewardKrw,
     requester,
     apartment,

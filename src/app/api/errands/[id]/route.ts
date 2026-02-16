@@ -45,16 +45,43 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: `잘못된 상태 변경입니다. (${current.status} -> ${nextStatus})` }, { status: 400 });
   }
 
+  const requestedHelper = typeof body?.helper === "string" ? body.helper.trim() : undefined;
+
   const updated = {
     ...current,
-    helper: typeof body?.helper === "string" ? body.helper : current.helper,
+    helper: current.helper,
     status: nextStatus,
   };
+
+  if (current.status === "open" && nextStatus === "matched") {
+    if (!requestedHelper) {
+      return NextResponse.json({ error: "매칭 시 수행자 이름이 필요합니다." }, { status: 400 });
+    }
+    if (requestedHelper === current.requester) {
+      return NextResponse.json({ error: "의뢰자 본인은 수행자로 매칭할 수 없습니다." }, { status: 400 });
+    }
+    updated.helper = requestedHelper;
+  }
+
+  if ((nextStatus === "in_progress" || nextStatus === "done") && !updated.helper) {
+    return NextResponse.json({ error: "수행자 없이 진행/완료 처리할 수 없습니다." }, { status: 400 });
+  }
 
   if (nextStatus === "done") {
     if (!body?.settlement) {
       return NextResponse.json({ error: "완료 시 정산 정보가 필요합니다." }, { status: 400 });
     }
+
+    const platformFeeKrw = Number(body?.settlement?.platformFeeKrw);
+    const helperPayoutKrw = Number(body?.settlement?.helperPayoutKrw);
+
+    if (!Number.isInteger(platformFeeKrw) || !Number.isInteger(helperPayoutKrw) || platformFeeKrw < 0 || helperPayoutKrw < 0) {
+      return NextResponse.json({ error: "정산 금액이 올바르지 않습니다." }, { status: 400 });
+    }
+    if (platformFeeKrw + helperPayoutKrw !== current.rewardKrw) {
+      return NextResponse.json({ error: "정산 합계가 의뢰 금액과 일치하지 않습니다." }, { status: 400 });
+    }
+
     updated.settlement = body.settlement;
   }
 

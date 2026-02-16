@@ -18,11 +18,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "인증코드가 만료되었습니다." }, { status: 400 });
   }
 
+  if (item.attempts >= 5) {
+    return NextResponse.json({ error: "인증 시도 횟수를 초과했습니다. 코드를 다시 발급받아 주세요." }, { status: 429 });
+  }
+
   if (item.code !== code) {
-    return NextResponse.json({ error: "인증코드가 일치하지 않습니다." }, { status: 400 });
+    item.attempts += 1;
+    item.lastAttemptAt = new Date().toISOString();
+    await writeDB(db);
+    return NextResponse.json({ error: `인증코드가 일치하지 않습니다. (${item.attempts}/5)` }, { status: 400 });
   }
 
   item.verified = true;
+  item.lastAttemptAt = new Date().toISOString();
   await writeDB(db);
 
   return NextResponse.json({ ok: true, neighborhood: `${item.dong} (${item.apartment})` });

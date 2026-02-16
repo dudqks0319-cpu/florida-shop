@@ -41,6 +41,8 @@ export type VerificationRequest = {
   code: string;
   expiresAt: string;
   verified: boolean;
+  attempts: number;
+  lastAttemptAt?: string;
   createdAt: string;
 };
 
@@ -65,7 +67,10 @@ export async function readDB(): Promise<DB> {
     const parsed = JSON.parse(raw) as DB;
     return {
       errands: parsed.errands || [],
-      verifications: parsed.verifications || [],
+      verifications: (parsed.verifications || []).map((v) => ({
+        ...v,
+        attempts: typeof v.attempts === "number" ? v.attempts : 0,
+      })),
       meta: parsed.meta || {},
     };
   } catch {
