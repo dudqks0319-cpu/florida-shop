@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth";
 import { makeId, readDB, writeDB } from "@/lib/store";
 
 const MIN_REWARD = 3000;
@@ -12,6 +13,14 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const currentUser = await getCurrentUser(req);
+  if (!currentUser) {
+    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  }
+  if (currentUser.role !== "requester" && currentUser.role !== "admin") {
+    return NextResponse.json({ error: "의뢰자 권한으로만 의뢰 등록이 가능합니다." }, { status: 403 });
+  }
+
   const body = await req.json();
   const title = String(body?.title || "").trim();
   const requester = String(body?.requester || "").trim();
@@ -23,6 +32,9 @@ export async function POST(req: NextRequest) {
 
   if (!title || !requester || !apartment || !rewardKrw || !verificationRequestId) {
     return NextResponse.json({ error: "필수 항목(제목/의뢰자/아파트/금액/동네인증)이 비었습니다." }, { status: 400 });
+  }
+  if (requester !== currentUser.name) {
+    return NextResponse.json({ error: "로그인 계정 이름과 의뢰자 이름이 일치해야 합니다." }, { status: 403 });
   }
   if (title.length > 80) {
     return NextResponse.json({ error: "제목은 80자 이내로 입력해주세요." }, { status: 400 });

@@ -13,6 +13,12 @@ type AddressItem = {
   admCd: string;
 };
 
+type CurrentUser = {
+  id: string;
+  name: string;
+  role: "requester" | "helper" | "admin";
+};
+
 type Errand = {
   id: string;
   title: string;
@@ -56,6 +62,10 @@ const statusLabel = {
 
 export default function Home() {
   const [errands, setErrands] = useState<Errand[]>([]);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [loginName, setLoginName] = useState("");
+  const [loginRole, setLoginRole] = useState<"requester" | "helper" | "admin">("requester");
+
   const [form, setForm] = useState({
     title: "",
     detail: "",
@@ -106,12 +116,57 @@ export default function Home() {
     setErrands(await res.json());
   };
 
+  const fetchMe = async () => {
+    const res = await fetch("/api/auth/me");
+    const json = await res.json();
+    setCurrentUser(json.user || null);
+    if (json.user?.name) {
+      setForm((prev) => ({ ...prev, requester: json.user.name }));
+    }
+  };
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
+    fetchMe();
   }, []);
 
+  const login = async () => {
+    if (!loginName.trim()) {
+      setNotice({ type: "error", text: "로그인 이름을 입력해주세요." });
+      return;
+    }
+    setBusy(true);
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: loginName.trim(), role: loginRole }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setNotice({ type: "error", text: json.error || "로그인 실패" });
+      setBusy(false);
+      return;
+    }
+    setCurrentUser(json.user);
+    setForm((prev) => ({ ...prev, requester: json.user.name }));
+    setNotice({ type: "ok", text: `${json.user.name}(${json.user.role}) 로그인 완료` });
+    setBusy(false);
+  };
+
+  const logout = async () => {
+    setBusy(true);
+    await fetch("/api/auth/logout", { method: "POST" });
+    setCurrentUser(null);
+    setNotice({ type: "ok", text: "로그아웃 되었습니다." });
+    setBusy(false);
+  };
+
   const createErrand = async () => {
+    if (!currentUser) {
+      setNotice({ type: "error", text: "로그인 후 의뢰 등록이 가능합니다." });
+      return;
+    }
     if (!form.title || !form.requester || !form.apartment) {
       setNotice({ type: "error", text: "제목/의뢰자/아파트를 모두 입력해주세요." });
       return;
@@ -272,6 +327,28 @@ export default function Home() {
       )}
 
       <section style={{ ...cardStyle, marginTop: 14 }}>
+        <h3>로그인 / 권한</h3>
+        {currentUser ? (
+          <div style={{ marginTop: 10 }}>
+            <p>
+              현재 로그인: <b>{currentUser.name}</b> ({currentUser.role})
+            </p>
+            <button disabled={busy} onClick={logout} style={{ ...secondaryBtn, marginTop: 8 }}>로그아웃</button>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 140px 110px", gap: 10, marginTop: 10 }}>
+            <input placeholder="로그인 이름" value={loginName} onChange={(e) => setLoginName(e.target.value)} style={inputStyle} />
+            <select value={loginRole} onChange={(e) => setLoginRole(e.target.value as "requester" | "helper" | "admin")} style={inputStyle}>
+              <option value="requester">의뢰자</option>
+              <option value="helper">수행자</option>
+              <option value="admin">관리자</option>
+            </select>
+            <button disabled={busy} onClick={login} style={primaryBtn}>로그인</button>
+          </div>
+        )}
+      </section>
+
+      <section style={{ ...cardStyle, marginTop: 14 }}>
         <h3>동네 인증 (당근 스타일 데모)</h3>
         {verifiedDongne ? (
           <div style={{ marginTop: 10, color: "#166534" }}>
@@ -368,7 +445,13 @@ export default function Home() {
         <h3>심부름 의뢰 등록</h3>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
           <input placeholder="제목(예: 편의점 다녀와주세요)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} style={inputStyle} />
-          <input placeholder="의뢰자 이름" value={form.requester} onChange={(e) => setForm({ ...form, requester: e.target.value })} style={inputStyle} />
+          <input
+            placeholder="의뢰자 이름"
+            value={form.requester}
+            readOnly={!!currentUser}
+            onChange={(e) => setForm({ ...form, requester: e.target.value })}
+            style={{ ...inputStyle, background: currentUser ? "#f8fafc" : "#fff" }}
+          />
           <input placeholder="아파트/동" value={form.apartment} onChange={(e) => setForm({ ...form, apartment: e.target.value })} style={inputStyle} />
           <input type="number" placeholder="건당 금액" value={form.rewardKrw} onChange={(e) => setForm({ ...form, rewardKrw: Number(e.target.value) })} style={inputStyle} />
           <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={inputStyle}>

@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  REQUESTER
+  HELPER
+  ADMIN
+}
+
+enum ErrandStatus {
+  OPEN
+  MATCHED
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  role      UserRole
+  createdAt DateTime @default(now())
+
+  requesterErrands Errand[] @relation("ErrandRequester")
+  helperErrands    Errand[] @relation("ErrandHelper")
+
+  @@index([name, role])
+}
+
+model VerificationRequest {
+  id            String   @id
+  requesterId   String
+  requesterName String
+  apartment     String
+  dong          String
+  code          String
+  expiresAt     DateTime
+  verified      Boolean  @default(false)
+  attempts      Int      @default(0)
+  lastAttemptAt DateTime?
+  createdAt     DateTime @default(now())
+
+  requester User @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+
+  @@index([requesterId])
+}
+
+model Errand {
+  id            String       @id @default(cuid())
+  title         String
+  detail        String
+  category      String
+  rewardKrw     Int
+  apartment     String
+  status        ErrandStatus @default(OPEN)
+  createdAt     DateTime     @default(now())
+
+  requesterId   String
+  requesterName String
+  helperId      String?
+  helperName    String?
+
+  cancellationReason           String?
+  cancellationPenaltyLevel     String?
+  cancellationRequesterPenalty Int?
+  cancellationHelperComp       Int?
+  cancellationDecidedAt        DateTime?
+
+  settlementPlatformFee Int?
+  settlementHelperPayout Int?
+  settlementStatus       String?
+  settlementSettledAt    DateTime?
+
+  requester User  @relation("ErrandRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  helper    User? @relation("ErrandHelper", fields: [helperId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([requesterId])
+  @@index([helperId])
+}

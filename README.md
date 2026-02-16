@@ -25,6 +25,20 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 - 실사용 전환 설계안: `REAL_WORLD_DESIGN.md`
 - 제품 실행 계획(MVP): `PRODUCT_PLAN.md`
 
+## PostgreSQL + 로그인/권한 분리
+
+- Prisma 스키마: `prisma/schema.prisma`
+- 환경변수: `.env.local`에 `DATABASE_URL` 설정
+- 초기 생성(예시):
+
+```bash
+npx prisma generate
+npx prisma migrate dev --name init
+```
+
+- 로그인 역할: `requester`, `helper`, `admin`
+- 서버 권한 검증: 의뢰 등록/매칭/진행/완료/취소 API에서 역할/사용자 검증 수행
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

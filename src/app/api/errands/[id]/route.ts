@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth";
 import { readDB, writeDB, type ErrandStatus } from "@/lib/store";
 
 type Params = { params: Promise<{ id: string }> };
@@ -32,6 +33,11 @@ function mediumPenalty(statusBefore: ErrandStatus, rewardKrw: number, hasHelper:
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
+  const currentUser = await getCurrentUser(req);
+  if (!currentUser) {
+    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  }
+
   const { id } = await params;
   const body = await req.json();
   const db = await readDB();
@@ -45,6 +51,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: `잘못된 상태 변경입니다. (${current.status} -> ${nextStatus})` }, { status: 400 });
   }
 
+  const isAdmin = currentUser.role === "admin";
+  const isRequester = currentUser.name === current.requester;
+  const isAssignedHelper = !!current.helper && currentUser.name === current.helper;
+
+  if (nextStatus === "matched" && !(isAdmin || currentUser.role === "helper")) {
+    return NextResponse.json({ error: "수행자 또는 관리자만 매칭할 수 있습니다." }, { status: 403 });
+  }
+  if (nextStatus === "in_progress" && !(isAdmin || isAssignedHelper)) {
+    return NextResponse.json({ error: "담당 수행자 또는 관리자만 진행 시작할 수 있습니다." }, { status: 403 });
+  }
+  if (nextStatus === "done" && !(isAdmin || isAssignedHelper)) {
+    return NextResponse.json({ error: "담당 수행자 또는 관리자만 완료 처리할 수 있습니다." }, { status: 403 });
+  }
+  if (nextStatus === "cancelled" && !(isAdmin || isRequester || isAssignedHelper)) {
+    return NextResponse.json({ error: "의뢰자/담당 수행자/관리자만 취소할 수 있습니다." }, { status: 403 });
+  }
+
   const requestedHelper = typeof body?.helper === "string" ? body.helper.trim() : undefined;
 
   const updated = {
@@ -54,13 +77,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   };
 
   if (current.status === "open" && nextStatus === "matched") {
-    if (!requestedHelper) {
+    const helperName = currentUser.role === "admin" ? requestedHelper : currentUser.name;
+
+    if (!helperName) {
       return NextResponse.json({ error: "매칭 시 수행자 이름이 필요합니다." }, { status: 400 });
     }
-    if (requestedHelper === current.requester) {
+    if (helperName === current.requester) {
       return NextResponse.json({ error: "의뢰자 본인은 수행자로 매칭할 수 없습니다." }, { status: 400 });
     }
-    updated.helper = requestedHelper;
+    updated.helper = helperName;
   }
 
   if ((nextStatus === "in_progress" || nextStatus === "done") && !updated.helper) {

@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth";
 import { makeId, readDB, writeDB } from "@/lib/store";
 
 export async function POST(req: NextRequest) {
+  const currentUser = await getCurrentUser(req);
+  if (!currentUser) {
+    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  }
+  if (currentUser.role !== "requester" && currentUser.role !== "admin") {
+    return NextResponse.json({ error: "의뢰자 권한으로만 인증코드 발급이 가능합니다." }, { status: 403 });
+  }
+
   const body = await req.json();
   const requester = String(body?.requester || "").trim();
   const apartment = String(body?.apartment || "").trim();
@@ -9,6 +18,9 @@ export async function POST(req: NextRequest) {
 
   if (!requester || !apartment || !dong) {
     return NextResponse.json({ error: "이름, 아파트명, 동네 정보가 필요합니다." }, { status: 400 });
+  }
+  if (requester !== currentUser.name) {
+    return NextResponse.json({ error: "로그인 계정 이름과 의뢰자 이름이 일치해야 합니다." }, { status: 403 });
   }
 
   const db = await readDB();
