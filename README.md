@@ -24,6 +24,7 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 - 실사용 전환 설계안: `REAL_WORLD_DESIGN.md`
 - 제품 실행 계획(MVP): `PRODUCT_PLAN.md`
+- API 발급/보안 저장 가이드: `API_SETUP_GUIDE.md`
 
 ## PostgreSQL + 로그인/권한 분리
 
