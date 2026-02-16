@@ -18,6 +18,8 @@ export type Session = {
 };
 
 export type ErrandStatus = "open" | "matched" | "in_progress" | "done" | "cancelled";
+export type PaymentMethod = "kakaopay" | "naverpay" | "tosspay" | "card";
+export type PaymentStatus = "pending" | "ready" | "paid" | "failed";
 
 export type Settlement = {
   platformFeeKrw: number;
@@ -34,6 +36,17 @@ export type Cancellation = {
   decidedAt: string;
 };
 
+export type PaymentInfo = {
+  method: PaymentMethod;
+  status: PaymentStatus;
+  provider: "mock" | "live";
+  orderId: string;
+  paymentKey?: string;
+  checkoutUrl?: string;
+  paidAt?: string;
+  failedReason?: string;
+};
+
 export type Errand = {
   id: string;
   title: string;
@@ -44,6 +57,7 @@ export type Errand = {
   apartment: string;
   status: ErrandStatus;
   helper?: string;
+  payment: PaymentInfo;
   settlement?: Settlement;
   cancellation?: Cancellation;
   createdAt: string;
@@ -90,7 +104,15 @@ export async function readDB(): Promise<DB> {
     return {
       users: parsed.users || [],
       sessions: parsed.sessions || [],
-      errands: parsed.errands || [],
+      errands: (parsed.errands || []).map((e) => ({
+        ...e,
+        payment: e.payment || {
+          method: "card",
+          status: "pending",
+          provider: "mock",
+          orderId: `legacy-${e.id}`,
+        },
+      })),
       verifications: (parsed.verifications || []).map((v) => ({
         ...v,
         attempts: typeof v.attempts === "number" ? v.attempts : 0,

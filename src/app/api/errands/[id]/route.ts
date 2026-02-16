@@ -77,6 +77,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   };
 
   if (current.status === "open" && nextStatus === "matched") {
+    if (current.payment?.status !== "paid") {
+      return NextResponse.json({ error: "결제 완료 후에만 매칭할 수 있습니다." }, { status: 400 });
+    }
+
     const helperName = currentUser.role === "admin" ? requestedHelper : currentUser.name;
 
     if (!helperName) {

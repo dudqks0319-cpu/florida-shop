@@ -5,6 +5,7 @@ import { makeId, readDB, writeDB } from "@/lib/store";
 const MIN_REWARD = 3000;
 const MAX_REWARD = 100000;
 const VALID_CATEGORIES = new Set(["convenience", "delivery", "bank", "admin", "etc"]);
+const VALID_PAYMENT_METHODS = new Set(["kakaopay", "naverpay", "tosspay", "card"]);
 
 export async function GET() {
   const db = await readDB();
@@ -29,6 +30,7 @@ export async function POST(req: NextRequest) {
   const verificationRequestId = String(body?.verificationRequestId || "").trim();
   const detail = String(body?.detail || "").trim();
   const category = String(body?.category || "etc").trim();
+  const paymentMethod = String(body?.paymentMethod || "card").trim();
 
   if (!title || !requester || !apartment || !rewardKrw || !verificationRequestId) {
     return NextResponse.json({ error: "필수 항목(제목/의뢰자/아파트/금액/동네인증)이 비었습니다." }, { status: 400 });
@@ -50,6 +52,9 @@ export async function POST(req: NextRequest) {
   }
   if (!VALID_CATEGORIES.has(category)) {
     return NextResponse.json({ error: "유효하지 않은 카테고리입니다." }, { status: 400 });
+  }
+  if (!VALID_PAYMENT_METHODS.has(paymentMethod)) {
+    return NextResponse.json({ error: "유효하지 않은 결제수단입니다." }, { status: 400 });
   }
 
   const db = await readDB();
@@ -82,6 +87,12 @@ export async function POST(req: NextRequest) {
     requester,
     apartment,
     status: "open" as const,
+    payment: {
+      method: paymentMethod as "kakaopay" | "naverpay" | "tosspay" | "card",
+      status: "pending" as const,
+      provider: "mock" as const,
+      orderId: `ord-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    },
     createdAt: new Date().toISOString(),
   };
 

@@ -27,6 +27,16 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 - API 발급/보안 저장 가이드: `API_SETUP_GUIDE.md`
 - API 키 실제 입력 순서 체크리스트: `API_KEY_INPUT_CHECKLIST.md`
 
+## 결제 연동(한국 결제수단)
+
+- 결제수단 선택 지원: `카카오페이`, `네이버페이`, `토스페이`, `카드`
+- 결제 플로우: 결제준비(`ready`) → 결제완료(`confirm`) → 매칭 가능
+- 현재 기본값은 `mock` 모드이며, `PAYMENT_MODE=live` 전환 시 실결제 게이트웨이 연동용 구조로 동작하도록 설계됨
+
+관련 API:
+- `POST /api/payments/:id/ready`
+- `POST /api/payments/:id/confirm`
+
 ## PostgreSQL + 로그인/권한 분리
 
 - Prisma 스키마: `prisma/schema.prisma`

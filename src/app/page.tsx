@@ -29,6 +29,14 @@ type Errand = {
   apartment: string;
   status: "open" | "matched" | "in_progress" | "done" | "cancelled";
   helper?: string;
+  payment: {
+    method: "kakaopay" | "naverpay" | "tosspay" | "card";
+    status: "pending" | "ready" | "paid" | "failed";
+    provider: "mock" | "live";
+    orderId: string;
+    checkoutUrl?: string;
+    paidAt?: string;
+  };
   settlement?: {
     platformFeeKrw: number;
     helperPayoutKrw: number;
@@ -60,6 +68,20 @@ const statusLabel = {
   cancelled: "취소",
 };
 
+const paymentMethodLabel = {
+  kakaopay: "카카오페이",
+  naverpay: "네이버페이",
+  tosspay: "토스페이",
+  card: "카드",
+};
+
+const paymentStatusLabel = {
+  pending: "결제대기",
+  ready: "결제준비",
+  paid: "결제완료",
+  failed: "결제실패",
+};
+
 export default function Home() {
   const [errands, setErrands] = useState<Errand[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
@@ -70,6 +92,7 @@ export default function Home() {
     title: "",
     detail: "",
     category: "convenience",
+    paymentMethod: "kakaopay",
     rewardKrw: 5000,
     requester: "",
     apartment: "",
@@ -190,7 +213,7 @@ export default function Home() {
       return;
     }
 
-    setForm({ ...form, title: "", detail: "", rewardKrw: 5000 });
+    setForm({ ...form, title: "", detail: "", rewardKrw: 5000, paymentMethod: form.paymentMethod });
     setNotice({ type: "ok", text: "의뢰가 등록되었습니다." });
     await refresh();
     setBusy(false);
@@ -226,6 +249,38 @@ export default function Home() {
         settledAt: new Date().toISOString(),
       },
     });
+  };
+
+  const readyPayment = async (e: Errand) => {
+    setBusy(true);
+    const res = await fetch(`/api/payments/${e.id}/ready`, { method: "POST" });
+    const json = await res.json();
+    if (!res.ok) {
+      setNotice({ type: "error", text: json.error || "결제 준비 실패" });
+      setBusy(false);
+      return;
+    }
+    setNotice({ type: "ok", text: `${paymentMethodLabel[e.payment.method]} 결제 준비 완료` });
+    await refresh();
+    setBusy(false);
+  };
+
+  const confirmPayment = async (e: Errand) => {
+    setBusy(true);
+    const res = await fetch(`/api/payments/${e.id}/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setNotice({ type: "error", text: json.error || "결제 완료 처리 실패" });
+      setBusy(false);
+      return;
+    }
+    setNotice({ type: "ok", text: "결제 완료 처리되었습니다." });
+    await refresh();
+    setBusy(false);
   };
 
   const lookupAddress = async () => {
@@ -461,6 +516,12 @@ export default function Home() {
             <option value="admin">행정/번호표</option>
             <option value="etc">기타</option>
           </select>
+          <select value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })} style={inputStyle}>
+            <option value="kakaopay">카카오페이</option>
+            <option value="naverpay">네이버페이</option>
+            <option value="tosspay">토스페이</option>
+            <option value="card">카드</option>
+          </select>
           <input placeholder="상세 내용" value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} style={inputStyle} />
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
@@ -506,6 +567,9 @@ export default function Home() {
                 {categoryLabel[e.category]} · {e.apartment} · <b>{e.rewardKrw.toLocaleString()}원</b>
               </p>
               <p style={{ color: "#64748b", marginTop: 4 }}>의뢰자: {e.requester}{e.helper ? ` / 수행자: ${e.helper}` : ""}</p>
+              <p style={{ color: "#334155", marginTop: 4 }}>
+                결제수단: <b>{paymentMethodLabel[e.payment.method]}</b> / 결제상태: <b>{paymentStatusLabel[e.payment.status]}</b>
+              </p>
 
               {e.settlement && (
                 <div style={{ marginTop: 8, padding: 10, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10 }}>
@@ -525,8 +589,14 @@ export default function Home() {
               )}
 
               <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                {e.status === "open" && e.payment.status === "pending" && (
+                  <button disabled={busy} onClick={() => readyPayment(e)} style={secondaryBtn}>결제 준비</button>
+                )}
+                {e.status === "open" && (e.payment.status === "ready" || e.payment.status === "pending") && (
+                  <button disabled={busy} onClick={() => confirmPayment(e)} style={secondaryBtn}>결제 완료 처리</button>
+                )}
                 {e.status === "open" && (
-                  <button disabled={busy} onClick={() => updateErrand(e.id, { status: "matched", helper: helperName || "근처도우미" })} style={secondaryBtn}>매칭</button>
+                  <button disabled={busy || e.payment.status !== "paid"} onClick={() => updateErrand(e.id, { status: "matched", helper: helperName || "근처도우미" })} style={secondaryBtn}>매칭</button>
                 )}
                 {e.status === "matched" && (
                   <button disabled={busy} onClick={() => updateErrand(e.id, { status: "in_progress" })} style={secondaryBtn}>진행 시작</button>
