@@ -367,6 +367,11 @@ export default function Home() {
     <main style={{ maxWidth: 1100, margin: "0 auto", padding: 20 }}>
       <h1 style={{ fontSize: 40, fontWeight: 800 }}>동네 건당 심부름</h1>
       <p style={{ color: "#64748b", marginTop: 8 }}>아파트 단지 기반으로 심부름을 올리고, 건당으로 매칭하는 MVP입니다.</p>
+      {currentUser?.role === "admin" && (
+        <p style={{ marginTop: 8 }}>
+          <a href="/admin" style={{ color: "#0a84ff", fontWeight: 600 }}>운영 대시보드 바로가기 →</a>
+        </p>
+      )}
       {notice && (
         <div
           style={{
