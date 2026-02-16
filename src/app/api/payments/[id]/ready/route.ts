@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { paymentReady } from "@/lib/payment";
 import { readDB, writeDB } from "@/lib/store";
 
 type Params = { params: Promise<{ id: string }> };
@@ -28,38 +29,49 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "이미 결제가 완료된 의뢰입니다." }, { status: 400 });
   }
 
-  const paymentMode = process.env.PAYMENT_MODE === "live" ? "live" : "mock";
   const method = errand.payment.method;
 
-  let checkoutUrl = "";
-  if (paymentMode === "mock") {
-    checkoutUrl = `/mock-checkout/${method}/${errand.payment.orderId}`;
-  } else {
-    checkoutUrl = `https://pay.example.com/checkout?orderId=${encodeURIComponent(errand.payment.orderId)}&method=${method}`;
+  try {
+    const ready = paymentReady({
+      orderId: errand.payment.orderId,
+      amount: errand.rewardKrw,
+      method,
+      orderName: errand.title,
+    });
+
+    db.errands[idx] = {
+      ...errand,
+      payment: {
+        ...errand.payment,
+        provider: ready.provider,
+        status: "ready",
+        checkoutUrl: ready.checkoutUrl,
+        failedReason: undefined,
+      },
+    };
+
+    await writeDB(db);
+
+    return NextResponse.json({
+      ok: true,
+      paymentMode: ready.provider,
+      method,
+      methodLabel: METHOD_LABEL[method] || method,
+      checkoutUrl: ready.checkoutUrl,
+      message: ready.message,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "결제 준비 중 오류가 발생했습니다.";
+    db.errands[idx] = {
+      ...errand,
+      payment: {
+        ...errand.payment,
+        status: "failed",
+        failedReason: message,
+      },
+    };
+    await writeDB(db);
+
+    return NextResponse.json({ error: message }, { status: 400 });
   }
-
-  db.errands[idx] = {
-    ...errand,
-    payment: {
-      ...errand.payment,
-      provider: paymentMode,
-      status: "ready",
-      checkoutUrl,
-      failedReason: undefined,
-    },
-  };
-
-  await writeDB(db);
-
-  return NextResponse.json({
-    ok: true,
-    paymentMode,
-    method,
-    methodLabel: METHOD_LABEL[method] || method,
-    checkoutUrl,
-    message:
-      paymentMode === "mock"
-        ? "데모 결제 준비가 완료되었습니다. 결제 완료 버튼으로 검증할 수 있습니다."
-        : "실결제 준비가 완료되었습니다. PG 결제창으로 이동하세요.",
-  });
 }

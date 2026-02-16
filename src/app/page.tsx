@@ -36,6 +36,7 @@ type Errand = {
     orderId: string;
     checkoutUrl?: string;
     paidAt?: string;
+    failedReason?: string;
   };
   settlement?: {
     platformFeeKrw: number;
@@ -570,6 +571,9 @@ export default function Home() {
               <p style={{ color: "#334155", marginTop: 4 }}>
                 결제수단: <b>{paymentMethodLabel[e.payment.method]}</b> / 결제상태: <b>{paymentStatusLabel[e.payment.status]}</b>
               </p>
+              {e.payment.failedReason && (
+                <p style={{ color: "#b91c1c", marginTop: 4, fontSize: 13 }}>결제오류: {e.payment.failedReason}</p>
+              )}
 
               {e.settlement && (
                 <div style={{ marginTop: 8, padding: 10, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10 }}>
