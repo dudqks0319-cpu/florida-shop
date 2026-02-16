@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum UserRole {
@@ -22,15 +21,21 @@ enum ErrandStatus {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  role      UserRole
-  createdAt DateTime @default(now())
+  id         String    @id @default(cuid())
+  name       String
+  phone      String?   @unique
+  role       UserRole
+  verifiedAt DateTime?
+  trustScore Float     @default(5.0)
+  status     String    @default("active") // active | suspended | banned
+  createdAt  DateTime  @default(now())
 
-  requesterErrands Errand[] @relation("ErrandRequester")
-  helperErrands    Errand[] @relation("ErrandHelper")
+  requesterErrands    Errand[]              @relation("ErrandRequester")
+  helperErrands       Errand[]              @relation("ErrandHelper")
+  verificationRequests VerificationRequest[]
 
   @@index([name, role])
+  @@index([phone])
 }
 
 model VerificationRequest {
