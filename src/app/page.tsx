@@ -53,7 +53,7 @@ type Errand = {
   };
 };
 
-const categoryLabel = {
+const categoryLabel: Record<string, string> = {
   convenience: "편의점",
   delivery: "배달/수령",
   bank: "은행",
@@ -61,7 +61,7 @@ const categoryLabel = {
   etc: "기타",
 };
 
-const statusLabel = {
+const statusLabel: Record<string, string> = {
   open: "모집중",
   matched: "매칭완료",
   in_progress: "진행중",
@@ -69,19 +69,31 @@ const statusLabel = {
   cancelled: "취소",
 };
 
-const paymentMethodLabel = {
+const statusColor: Record<string, string> = {
+  open: "bg-blue-100 text-blue-800 border-blue-200",
+  matched: "bg-amber-100 text-amber-800 border-amber-200",
+  in_progress: "bg-purple-100 text-purple-800 border-purple-200",
+  done: "bg-green-100 text-green-800 border-green-200",
+  cancelled: "bg-red-100 text-red-800 border-red-200",
+};
+
+const paymentMethodLabel: Record<string, string> = {
   kakaopay: "카카오페이",
   naverpay: "네이버페이",
   tosspay: "토스페이",
   card: "카드",
 };
 
-const paymentStatusLabel = {
+const paymentStatusLabel: Record<string, string> = {
   pending: "결제대기",
   ready: "결제준비",
   paid: "결제완료",
   failed: "결제실패",
 };
+
+function formatKrw(n: number) {
+  return n.toLocaleString("ko-KR") + "원";
+}
 
 export default function Home() {
   const [errands, setErrands] = useState<Errand[]>([]);
@@ -136,16 +148,29 @@ export default function Home() {
   }, [errands, statusFilter, searchKeyword]);
 
   const refresh = async () => {
-    const res = await fetch("/api/errands");
-    setErrands(await res.json());
+    try {
+      const res = await fetch("/api/errands");
+      if (!res.ok) {
+        setNotice({ type: "error", text: "의뢰 목록을 불러오는데 실패했습니다." });
+        return;
+      }
+      setErrands(await res.json());
+    } catch {
+      setNotice({ type: "error", text: "서버에 연결할 수 없습니다." });
+    }
   };
 
   const fetchMe = async () => {
-    const res = await fetch("/api/auth/me");
-    const json = await res.json();
-    setCurrentUser(json.user || null);
-    if (json.user?.name) {
-      setForm((prev) => ({ ...prev, requester: json.user.name }));
+    try {
+      const res = await fetch("/api/auth/me");
+      if (!res.ok) return;
+      const json = await res.json();
+      setCurrentUser(json.user || null);
+      if (json.user?.name) {
+        setForm((prev) => ({ ...prev, requester: json.user.name }));
+      }
+    } catch {
+      // 세션 없는 경우 무시
     }
   };
 
@@ -238,7 +263,7 @@ export default function Home() {
   };
 
   const completeAndSettle = async (e: Errand) => {
-    const platformFeeKrw = Math.round(e.rewardKrw * 0.1); // 10% 수수료
+    const platformFeeKrw = Math.round(e.rewardKrw * 0.1);
     const helperPayoutKrw = e.rewardKrw - platformFeeKrw;
 
     await updateErrand(e.id, {
@@ -342,7 +367,7 @@ export default function Home() {
 
   const verifyNeighborhood = async () => {
     if (!verifyRequestId.trim() || !verifyCode.trim()) {
-      setNotice({ type: "error", text: "인증요청 ID와 인증코드를 입력해주세요." });
+      setNotice({ type: "error", text: "인증코드를 입력해주세요." });
       return;
     }
     setBusy(true);
@@ -364,254 +389,338 @@ export default function Home() {
   };
 
   return (
-    <main style={{ maxWidth: 1100, margin: "0 auto", padding: 20 }}>
-      <h1 style={{ fontSize: 40, fontWeight: 800 }}>동네 건당 심부름</h1>
-      <p style={{ color: "#64748b", marginTop: 8 }}>아파트 단지 기반으로 심부름을 올리고, 건당으로 매칭하는 MVP입니다.</p>
+    <main className="max-w-[1100px] mx-auto px-4 sm:px-5 py-5 pb-16">
+      {/* 헤더 */}
+      <h1 className="text-3xl sm:text-[40px] font-extrabold tracking-tight">동네 건당 심부름</h1>
+      <p className="text-slate-500 mt-2 text-sm sm:text-base">아파트 단지 기반으로 심부름을 올리고, 건당으로 매칭하는 서비스입니다.</p>
       {currentUser?.role === "admin" && (
-        <p style={{ marginTop: 8 }}>
-          <a href="/admin" style={{ color: "#0a84ff", fontWeight: 600 }}>운영 대시보드 바로가기 →</a>
+        <p className="mt-2">
+          <a href="/admin" className="text-blue-500 font-semibold hover:underline">운영 대시보드 바로가기 →</a>
         </p>
       )}
+
+      {/* 알림 */}
       {notice && (
         <div
-          style={{
-            marginTop: 10,
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: `1px solid ${notice.type === "ok" ? "#86efac" : "#fecaca"}`,
-            background: notice.type === "ok" ? "#f0fdf4" : "#fef2f2",
-            color: notice.type === "ok" ? "#166534" : "#991b1b",
-          }}
+          className={`mt-3 px-3 py-2.5 rounded-xl border text-sm ${
+            notice.type === "ok"
+              ? "border-green-300 bg-green-50 text-green-800"
+              : "border-red-300 bg-red-50 text-red-800"
+          }`}
         >
           {notice.text}
         </div>
       )}
 
-      <section style={{ ...cardStyle, marginTop: 14 }}>
-        <h3>로그인 / 권한</h3>
+      {/* 로그인 / 권한 */}
+      <section className="card mt-4">
+        <h3 className="font-bold text-base">로그인 / 권한</h3>
         {currentUser ? (
-          <div style={{ marginTop: 10 }}>
-            <p>
+          <div className="mt-3">
+            <p className="text-sm">
               현재 로그인: <b>{currentUser.name}</b> ({currentUser.role})
             </p>
-            <button disabled={busy} onClick={logout} style={{ ...secondaryBtn, marginTop: 8 }}>로그아웃</button>
+            <button disabled={busy} onClick={logout} className="btn-secondary mt-2">로그아웃</button>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 140px 110px", gap: 10, marginTop: 10 }}>
-            <input placeholder="로그인 이름" value={loginName} onChange={(e) => setLoginName(e.target.value)} style={inputStyle} />
-            <select value={loginRole} onChange={(e) => setLoginRole(e.target.value as "requester" | "helper" | "admin")} style={inputStyle}>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_110px] gap-2.5 mt-3">
+            <input
+              placeholder="로그인 이름"
+              value={loginName}
+              onChange={(e) => setLoginName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && login()}
+              className="input-field"
+            />
+            <select value={loginRole} onChange={(e) => setLoginRole(e.target.value as CurrentUser["role"])} className="input-field">
               <option value="requester">의뢰자</option>
               <option value="helper">수행자</option>
               <option value="admin">관리자</option>
             </select>
-            <button disabled={busy} onClick={login} style={primaryBtn}>로그인</button>
+            <button disabled={busy} onClick={login} className="btn-primary">{busy ? "처리중..." : "로그인"}</button>
           </div>
         )}
       </section>
 
-      <section style={{ ...cardStyle, marginTop: 14 }}>
-        <h3>동네 인증 (당근 스타일 데모)</h3>
+      {/* 동네 인증 */}
+      <section className="card mt-4">
+        <h3 className="font-bold text-base">동네 인증</h3>
         {verifiedDongne ? (
-          <div style={{ marginTop: 10, color: "#166534" }}>
-            <p>✅ 인증된 동네: <b>{verifiedDongne}</b></p>
-            <p style={{ marginTop: 4, fontSize: 13 }}>인증 ID 연결 완료: <b>{verifiedRequestId}</b></p>
+          <div className="mt-3 text-green-800 bg-green-50 rounded-lg p-3 border border-green-200">
+            <p className="font-medium">인증된 동네: <b>{verifiedDongne}</b></p>
           </div>
         ) : (
-          <p style={{ marginTop: 10, color: "#64748b" }}>주소/아파트 검색 후 인증코드를 발급받아 동네를 인증하세요.</p>
+          <p className="mt-2 text-slate-500 text-sm">주소/아파트 검색 후 인증코드를 발급받아 동네를 인증하세요.</p>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: 10, marginTop: 10 }}>
+        {/* Step 1: 주소 검색 */}
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2.5 mt-3">
           <input
-            placeholder="도로명주소/아파트명 입력 (예: 화봉동, 무룡로, OO아파트)"
+            placeholder="도로명주소/아파트명 입력 (예: 화봉동, OO아파트)"
             value={addrKeyword}
             onChange={(e) => setAddrKeyword(e.target.value)}
-            style={inputStyle}
+            onKeyDown={(e) => e.key === "Enter" && lookupAddress()}
+            className="input-field"
           />
-          <button disabled={busy} onClick={lookupAddress} style={secondaryBtn}>{busy ? "처리중..." : "검색"}</button>
+          <button disabled={busy} onClick={lookupAddress} className="btn-secondary whitespace-nowrap">
+            {busy ? "검색중..." : "주소 검색"}
+          </button>
         </div>
 
+        {/* 주소 검색 결과 */}
         {addrItems.length > 0 && (
-          <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+          <div className="grid gap-2 mt-3">
             {addrItems.map((a, idx) => {
               const label = `${a.siNm} ${a.sggNm} ${a.emdNm} · ${a.bdNm || "건물명없음"}`;
+              const isSelected = selectedAddr?.admCd === a.admCd && selectedAddr?.bdNm === a.bdNm;
               return (
                 <button
                   key={`${a.admCd}-${idx}`}
                   onClick={() => setSelectedAddr(a)}
-                  style={{
-                    ...secondaryBtn,
-                    textAlign: "left",
-                    background: selectedAddr?.admCd === a.admCd ? "#e0f2fe" : "#fff",
-                  }}
+                  className={`text-left p-2.5 rounded-lg border text-sm transition-colors ${
+                    isSelected ? "bg-blue-50 border-blue-300 font-medium" : "bg-white border-slate-200 hover:bg-slate-50"
+                  }`}
                 >
                   {label}
+                  <span className="block text-xs text-slate-400 mt-0.5">{a.roadAddr}</span>
                 </button>
               );
             })}
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, marginTop: 10 }}>
-          <input
-            placeholder="인증요청 ID"
-            value={verifyRequestId}
-            onChange={(e) => setVerifyRequestId(e.target.value)}
-            style={inputStyle}
-          />
-          <input
-            placeholder="인증코드 6자리"
-            value={verifyCode}
-            onChange={(e) => setVerifyCode(e.target.value)}
-            style={inputStyle}
-          />
-          <button disabled={busy} onClick={verifyNeighborhood} style={primaryBtn}>{busy ? "확인중..." : "인증 확인"}</button>
-        </div>
+        {/* Step 2: 인증코드 발급 */}
+        {selectedAddr && !verifiedDongne && (
+          <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+            <p className="text-sm text-slate-600 mb-2">
+              선택: <b>{selectedAddr.bdNm || selectedAddr.roadAddr}</b>
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button disabled={busy} onClick={issueNeighborhoodCode} className="btn-primary">
+                {busy ? "발급중..." : "인증코드 발급"}
+              </button>
+              {demoCode && <span className="text-slate-600 text-sm">데모코드: <b>{demoCode}</b></span>}
+            </div>
+          </div>
+        )}
 
-        <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
-          <button disabled={busy} onClick={issueNeighborhoodCode} style={secondaryBtn}>{busy ? "발급중..." : "인증코드 발급"}</button>
-          {demoCode && <span style={{ color: "#475569" }}>데모코드: <b>{demoCode}</b></span>}
-        </div>
+        {/* Step 3: 인증코드 입력 */}
+        {verifyRequestId && !verifiedDongne && (
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2.5 mt-3">
+            <input
+              placeholder="인증코드 6자리 입력"
+              value={verifyCode}
+              onChange={(e) => setVerifyCode(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && verifyNeighborhood()}
+              className="input-field"
+              maxLength={6}
+            />
+            <button disabled={busy} onClick={verifyNeighborhood} className="btn-primary whitespace-nowrap">
+              {busy ? "확인중..." : "인증 확인"}
+            </button>
+          </div>
+        )}
       </section>
 
-      <section style={{ ...cardStyle, marginTop: 14 }}>
-        <h3>네이버 지도</h3>
-        <p style={{ marginTop: 8, color: "#64748b" }}>선택한 주소를 지도에서 확인할 수 있어요.</p>
-        <div style={{ marginTop: 10 }}>
+      {/* 네이버 지도 */}
+      <section className="card mt-4">
+        <h3 className="font-bold text-base">네이버 지도</h3>
+        <p className="mt-2 text-slate-500 text-sm">선택한 주소를 지도에서 확인할 수 있어요.</p>
+        <div className="mt-3">
           <NaverMap queryAddress={mapQuery} />
         </div>
       </section>
 
-      <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 20 }}>
-        <div style={cardStyle}>
-          <h3>운영 요약</h3>
-          <ul style={{ marginLeft: 18, marginTop: 10 }}>
+      {/* 운영 요약 & 신뢰 규칙 */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+        <div className="card">
+          <h3 className="font-bold text-base">운영 요약</h3>
+          <ul className="mt-3 space-y-1.5 text-sm ml-4 list-disc text-slate-700">
             <li>총 의뢰: <b>{errands.length}건</b></li>
             <li>모집중: <b>{openCount}건</b></li>
             <li>완료: <b>{errands.filter((e) => e.status === "done").length}건</b></li>
-            <li>패널티 누적: <b>{totalPenalty.toLocaleString()}원</b></li>
+            <li>패널티 누적: <b>{formatKrw(totalPenalty)}</b></li>
           </ul>
         </div>
-        <div style={cardStyle}>
-          <h3>신뢰 규칙(초안)</h3>
-          <ul style={{ marginLeft: 18, marginTop: 10 }}>
+        <div className="card">
+          <h3 className="font-bold text-base">신뢰 규칙(초안)</h3>
+          <ul className="mt-3 space-y-1.5 text-sm ml-4 list-disc text-slate-700">
             <li>건당 보상금 사전 표시 (3,000~100,000원)</li>
-            <li>중강도 패널티: 매칭 후 취소 최대 2,000원, 진행 중 취소 최대 3,000원</li>
-            <li>완료 확인 후 자동 정산(플랫폼 10%, 수행자 90%)</li>
-            <li>파일럿 1개 단지 외 의뢰 등록 제한</li>
+            <li>매칭 후 취소 최대 2,000원 패널티</li>
+            <li>진행 중 취소 최대 3,000원 패널티</li>
+            <li>완료 후 자동 정산 (플랫폼 10%, 수행자 90%)</li>
           </ul>
         </div>
       </section>
 
-      <section style={{ ...cardStyle, marginTop: 14 }}>
-        <h3>심부름 의뢰 등록</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-          <input placeholder="제목(예: 편의점 다녀와주세요)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} style={inputStyle} />
+      {/* 심부름 의뢰 등록 */}
+      <section className="card mt-4">
+        <h3 className="font-bold text-base">심부름 의뢰 등록</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
+          <input placeholder="제목 (예: 편의점 다녀와주세요)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="input-field" maxLength={80} />
           <input
             placeholder="의뢰자 이름"
             value={form.requester}
             readOnly={!!currentUser}
             onChange={(e) => setForm({ ...form, requester: e.target.value })}
-            style={{ ...inputStyle, background: currentUser ? "#f8fafc" : "#fff" }}
+            className={`input-field ${currentUser ? "bg-slate-50 text-slate-500" : ""}`}
           />
-          <input placeholder="아파트/동" value={form.apartment} onChange={(e) => setForm({ ...form, apartment: e.target.value })} style={inputStyle} />
-          <input type="number" placeholder="건당 금액" value={form.rewardKrw} onChange={(e) => setForm({ ...form, rewardKrw: Number(e.target.value) })} style={inputStyle} />
-          <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={inputStyle}>
+          <input placeholder="아파트/동" value={form.apartment} onChange={(e) => setForm({ ...form, apartment: e.target.value })} className="input-field" />
+          <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="input-field">
             <option value="convenience">편의점</option>
             <option value="delivery">배달/수령</option>
             <option value="bank">은행</option>
             <option value="admin">행정/번호표</option>
             <option value="etc">기타</option>
           </select>
-          <select value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })} style={inputStyle}>
+          <select value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })} className="input-field">
             <option value="kakaopay">카카오페이</option>
             <option value="naverpay">네이버페이</option>
             <option value="tosspay">토스페이</option>
             <option value="card">카드</option>
           </select>
-          <input placeholder="상세 내용" value={form.detail} onChange={(e) => setForm({ ...form, detail: e.target.value })} style={inputStyle} />
+          <div className="relative">
+            <input
+              type="number"
+              placeholder="건당 보상금"
+              value={form.rewardKrw}
+              onChange={(e) => setForm({ ...form, rewardKrw: Number(e.target.value) })}
+              className="input-field w-full pr-8"
+              min={3000}
+              max={100000}
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">원</span>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-          {[5000, 10000, 15000].map((v) => (
-            <button key={v} type="button" onClick={() => setForm((p) => ({ ...p, rewardKrw: v }))} style={secondaryBtn}>
-              {v.toLocaleString()}원
+        <textarea
+          placeholder="상세 내용 (요청사항, 물품 등을 자세히 적어주세요)"
+          value={form.detail}
+          onChange={(e) => setForm({ ...form, detail: e.target.value })}
+          className="input-field w-full mt-2.5 min-h-[80px] resize-y"
+          maxLength={500}
+          rows={3}
+        />
+        {form.detail && (
+          <p className="text-xs text-slate-400 text-right mt-1">{form.detail.length}/500</p>
+        )}
+        <div className="flex gap-2 mt-3 flex-wrap">
+          {[3000, 5000, 10000, 15000].map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setForm((p) => ({ ...p, rewardKrw: v }))}
+              className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                form.rewardKrw === v ? "bg-blue-50 border-blue-300 text-blue-700 font-medium" : "bg-white border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              {formatKrw(v)}
             </button>
           ))}
         </div>
-        <button disabled={busy} onClick={createErrand} style={{ ...primaryBtn, opacity: verifiedRequestId ? 1 : 0.7 }}>
-          {busy ? "등록중..." : verifiedRequestId ? "의뢰 등록" : "동네 인증 후 의뢰 등록"}
+        {form.rewardKrw > 0 && (
+          <p className="text-xs text-slate-500 mt-2">
+            수행자 지급: <b>{formatKrw(Math.round(form.rewardKrw * 0.9))}</b> / 플랫폼 수수료: <b>{formatKrw(Math.round(form.rewardKrw * 0.1))}</b>
+          </p>
+        )}
+        <button
+          disabled={busy || !verifiedRequestId}
+          onClick={createErrand}
+          className={`btn-primary w-full mt-3 ${!verifiedRequestId ? "opacity-60 cursor-not-allowed" : ""}`}
+        >
+          {busy ? "등록중..." : verifiedRequestId ? "의뢰 등록" : "동네 인증 후 의뢰 등록 가능"}
         </button>
       </section>
 
-      <section style={{ ...cardStyle, marginTop: 14 }}>
-        <h3>의뢰 목록</h3>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
-          <input placeholder="수행자 이름 입력(매칭할 때 사용)" value={helperName} onChange={(e) => setHelperName(e.target.value)} style={inputStyle} />
-          <input placeholder="제목/아파트/의뢰자 검색" value={searchKeyword} onChange={(e) => setSearchKeyword(e.target.value)} style={inputStyle} />
+      {/* 의뢰 목록 */}
+      <section className="card mt-4">
+        <h3 className="font-bold text-base">의뢰 목록</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
+          <input
+            placeholder="수행자 이름 입력 (매칭할 때 사용)"
+            value={helperName}
+            onChange={(e) => setHelperName(e.target.value)}
+            className="input-field"
+          />
+          <input
+            placeholder="제목/아파트/의뢰자 검색"
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            className="input-field"
+          />
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+        <div className="flex gap-2 mt-3 flex-wrap">
           {(["all", "open", "matched", "in_progress", "done", "cancelled"] as const).map((s) => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              style={{ ...secondaryBtn, background: statusFilter === s ? "#dbeafe" : "#f8fafc" }}
+              className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                statusFilter === s ? "bg-blue-100 border-blue-300 text-blue-700 font-medium" : "bg-white border-slate-200 hover:bg-slate-50"
+              }`}
             >
               {s === "all" ? "전체" : statusLabel[s]}
             </button>
           ))}
         </div>
 
-        <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-          {filteredErrands.length === 0 && <p>조건에 맞는 의뢰가 없습니다.</p>}
+        <div className="grid gap-3 mt-4">
+          {filteredErrands.length === 0 && <p className="text-slate-500 text-sm py-4 text-center">조건에 맞는 의뢰가 없습니다.</p>}
           {filteredErrands.map((e) => (
-            <div key={e.id} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, background: "#fff" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                <b>{e.title}</b>
-                <span style={badgeStyle}>{statusLabel[e.status]}</span>
+            <div key={e.id} className="border border-slate-200 rounded-xl p-3 sm:p-4 bg-white">
+              <div className="flex justify-between items-start gap-2">
+                <b className="text-sm sm:text-base leading-snug">{e.title}</b>
+                <span className={`shrink-0 text-xs px-2.5 py-0.5 rounded-full border font-medium ${statusColor[e.status]}`}>
+                  {statusLabel[e.status]}
+                </span>
               </div>
-              <p style={{ color: "#475569", marginTop: 6 }}>{e.detail || "상세 내용 없음"}</p>
-              <p style={{ color: "#334155", marginTop: 6 }}>
-                {categoryLabel[e.category]} · {e.apartment} · <b>{e.rewardKrw.toLocaleString()}원</b>
+              <p className="text-slate-500 mt-1.5 text-sm">{e.detail || "상세 내용 없음"}</p>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-sm text-slate-600">
+                <span>{categoryLabel[e.category]}</span>
+                <span>{e.apartment}</span>
+                <span className="font-semibold text-slate-800">{formatKrw(e.rewardKrw)}</span>
+              </div>
+              <p className="text-slate-500 mt-1 text-xs">
+                의뢰자: {e.requester}{e.helper ? ` / 수행자: ${e.helper}` : ""}
               </p>
-              <p style={{ color: "#64748b", marginTop: 4 }}>의뢰자: {e.requester}{e.helper ? ` / 수행자: ${e.helper}` : ""}</p>
-              <p style={{ color: "#334155", marginTop: 4 }}>
-                결제수단: <b>{paymentMethodLabel[e.payment.method]}</b> / 결제상태: <b>{paymentStatusLabel[e.payment.status]}</b>
+              <p className="text-slate-600 mt-1 text-xs">
+                결제: <b>{paymentMethodLabel[e.payment.method]}</b> · <b>{paymentStatusLabel[e.payment.status]}</b>
               </p>
               {e.payment.failedReason && (
-                <p style={{ color: "#b91c1c", marginTop: 4, fontSize: 13 }}>결제오류: {e.payment.failedReason}</p>
+                <p className="text-red-700 mt-1 text-xs">결제오류: {e.payment.failedReason}</p>
               )}
 
               {e.settlement && (
-                <div style={{ marginTop: 8, padding: 10, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10 }}>
-                  <p style={{ margin: 0, color: "#334155" }}>
-                    정산: 수행자 <b>{e.settlement.helperPayoutKrw.toLocaleString()}원</b> / 플랫폼 수수료 <b>{e.settlement.platformFeeKrw.toLocaleString()}원</b>
-                  </p>
+                <div className="mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600">
+                  정산: 수행자 <b>{formatKrw(e.settlement.helperPayoutKrw)}</b> / 수수료 <b>{formatKrw(e.settlement.platformFeeKrw)}</b>
                 </div>
               )}
 
               {e.cancellation && (
-                <div style={{ marginTop: 8, padding: 10, background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 10 }}>
-                  <p style={{ margin: 0, color: "#9a3412" }}>
-                    취소정책: {e.cancellation.reason} · 패널티 <b>{e.cancellation.requesterPenaltyKrw.toLocaleString()}원</b>
-                    {e.cancellation.helperCompensationKrw > 0 ? ` (수행자 보상 ${e.cancellation.helperCompensationKrw.toLocaleString()}원)` : ""}
-                  </p>
+                <div className="mt-2 p-2.5 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
+                  취소: {e.cancellation.reason} · 패널티 <b>{formatKrw(e.cancellation.requesterPenaltyKrw)}</b>
+                  {e.cancellation.helperCompensationKrw > 0 ? ` (수행자 보상 ${formatKrw(e.cancellation.helperCompensationKrw)})` : ""}
                 </div>
               )}
 
-              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+              <div className="flex gap-2 mt-3 flex-wrap">
                 {e.status === "open" && e.payment.status === "pending" && (
-                  <button disabled={busy} onClick={() => readyPayment(e)} style={secondaryBtn}>결제 준비</button>
+                  <button disabled={busy} onClick={() => readyPayment(e)} className="btn-secondary text-sm">결제 준비</button>
                 )}
                 {e.status === "open" && (e.payment.status === "ready" || e.payment.status === "pending") && (
-                  <button disabled={busy} onClick={() => confirmPayment(e)} style={secondaryBtn}>결제 완료 처리</button>
+                  <button disabled={busy} onClick={() => confirmPayment(e)} className="btn-secondary text-sm">결제 완료 처리</button>
                 )}
                 {e.status === "open" && (
-                  <button disabled={busy || e.payment.status !== "paid"} onClick={() => updateErrand(e.id, { status: "matched", helper: helperName || "근처도우미" })} style={secondaryBtn}>매칭</button>
+                  <button
+                    disabled={busy || e.payment.status !== "paid"}
+                    onClick={() => updateErrand(e.id, { status: "matched", helper: helperName || "근처도우미" })}
+                    className="btn-secondary text-sm disabled:opacity-50"
+                  >
+                    매칭
+                  </button>
                 )}
                 {e.status === "matched" && (
-                  <button disabled={busy} onClick={() => updateErrand(e.id, { status: "in_progress" })} style={secondaryBtn}>진행 시작</button>
+                  <button disabled={busy} onClick={() => updateErrand(e.id, { status: "in_progress" })} className="btn-secondary text-sm">진행 시작</button>
                 )}
                 {e.status === "in_progress" && (
-                  <button disabled={busy} onClick={() => completeAndSettle(e)} style={secondaryBtn}>완료 처리·정산</button>
+                  <button disabled={busy} onClick={() => completeAndSettle(e)} className="btn-secondary text-sm">완료 처리·정산</button>
                 )}
                 {e.status !== "done" && e.status !== "cancelled" && (
                   <button
@@ -621,7 +730,7 @@ export default function Home() {
                         updateErrand(e.id, { status: "cancelled" });
                       }
                     }}
-                    style={dangerBtn}
+                    className="btn-danger text-sm"
                   >
                     취소
                   </button>
@@ -631,58 +740,81 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      <style jsx global>{`
+        .card {
+          background: rgba(255, 255, 255, 0.76);
+          border: 1px solid rgba(255, 255, 255, 0.85);
+          border-radius: 16px;
+          padding: 14px 16px;
+          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+          backdrop-filter: blur(14px);
+        }
+        .input-field {
+          border: 1px solid #cbd5e1;
+          border-radius: 10px;
+          padding: 9px 12px;
+          background: #fff;
+          font-size: 14px;
+          outline: none;
+          transition: border-color 0.15s;
+        }
+        .input-field:focus {
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+        }
+        .btn-primary {
+          border: none;
+          background: #2563eb;
+          color: #fff;
+          border-radius: 10px;
+          padding: 9px 16px;
+          cursor: pointer;
+          font-weight: 600;
+          font-size: 14px;
+          transition: background 0.15s;
+        }
+        .btn-primary:hover:not(:disabled) {
+          background: #1d4ed8;
+        }
+        .btn-primary:disabled {
+          cursor: not-allowed;
+        }
+        .btn-secondary {
+          border: 1px solid #cbd5e1;
+          background: #f8fafc;
+          border-radius: 8px;
+          padding: 7px 12px;
+          cursor: pointer;
+          font-size: 14px;
+          transition: background 0.15s, border-color 0.15s;
+        }
+        .btn-secondary:hover:not(:disabled) {
+          background: #f1f5f9;
+          border-color: #94a3b8;
+        }
+        .btn-secondary:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .btn-danger {
+          border: 1px solid #fca5a5;
+          background: #fef2f2;
+          color: #b91c1c;
+          border-radius: 8px;
+          padding: 7px 12px;
+          cursor: pointer;
+          font-size: 14px;
+          transition: background 0.15s;
+        }
+        .btn-danger:hover:not(:disabled) {
+          background: #fee2e2;
+        }
+        .btn-danger:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+      `}</style>
     </main>
   );
 }
-
-const cardStyle: React.CSSProperties = {
-  background: "rgba(255,255,255,0.72)",
-  border: "1px solid rgba(255,255,255,0.8)",
-  borderRadius: 20,
-  padding: 16,
-  boxShadow: "0 20px 40px rgba(15,23,42,0.08)",
-  backdropFilter: "blur(14px)",
-};
-
-const inputStyle: React.CSSProperties = {
-  border: "1px solid #cbd5e1",
-  borderRadius: 12,
-  padding: "10px 12px",
-  background: "#fff",
-};
-
-const primaryBtn: React.CSSProperties = {
-  marginTop: 12,
-  border: "1px solid #0a84ff",
-  background: "#0a84ff",
-  color: "#fff",
-  borderRadius: 12,
-  padding: "10px 14px",
-  cursor: "pointer",
-};
-
-const secondaryBtn: React.CSSProperties = {
-  border: "1px solid #cbd5e1",
-  background: "#f8fafc",
-  borderRadius: 10,
-  padding: "8px 12px",
-  cursor: "pointer",
-};
-
-const dangerBtn: React.CSSProperties = {
-  border: "1px solid #ef4444",
-  background: "#fff1f2",
-  color: "#b91c1c",
-  borderRadius: 10,
-  padding: "8px 12px",
-  cursor: "pointer",
-};
-
-const badgeStyle: React.CSSProperties = {
-  border: "1px solid #bae6fd",
-  background: "#e0f2fe",
-  color: "#075985",
-  borderRadius: 999,
-  padding: "3px 10px",
-  fontSize: 12,
-};
