@@ -22,6 +22,9 @@ export type FloridaOrder = {
   claimType?: "refund" | "exchange";
   claimReason?: string;
   claimStatus?: "요청접수" | "처리중" | "완료" | "반려";
+  courier?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
 };
 
 const KEY_WISH = "florida:wish";
@@ -109,6 +112,16 @@ export function requestOrderClaim(orderId: string, type: "refund" | "exchange", 
         }
       : o,
   );
+  safeSet(KEY_ORDERS, next);
+  return next;
+}
+
+export function updateOrderAdmin(
+  orderId: string,
+  patch: Partial<Pick<FloridaOrder, "status" | "claimStatus" | "courier" | "trackingNumber" | "trackingUrl">>,
+) {
+  const cur = getOrders();
+  const next = cur.map((o) => (o.id === orderId ? { ...o, ...patch } : o));
   safeSet(KEY_ORDERS, next);
   return next;
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { FLORIDA_PRODUCTS } from "@/lib/florida-products";
 import { getBannerImage, getImageOverrides, setBannerImage, setImageOverrides } from "@/lib/florida-admin";
@@ -38,7 +39,10 @@ export default function FloridaAdminPage() {
 
   return (
     <main className="max-w-2xl mx-auto p-4 pb-20">
-      <h1 className="text-2xl font-black">플로리다 관리자</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-black">플로리다 관리자</h1>
+        <Link href="/florida/admin/orders" className="text-sm text-blue-600 underline">주문관리</Link>
+      </div>
       <p className="text-sm text-slate-500 mt-1">배너/상품 이미지 교체</p>
 
       <section className="mt-4 p-4 border rounded-xl bg-white">
