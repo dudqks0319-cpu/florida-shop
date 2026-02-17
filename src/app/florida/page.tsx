@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import { FLORIDA_PRODUCTS } from "@/lib/florida-products";
 import { getCart, getWish, pushRecent, setCart, setWish } from "@/lib/florida-store";
 import { getBannerImage, getImageOverrides } from "@/lib/florida-admin";
+import ProductCard from "@/components/product/ProductCard";
+import BottomNav from "@/components/layout/BottomNav";
 
 const QUICK_MENUS = ["남자패션", "의류", "주얼리", "패션소품", "빅사이즈", "쿠폰", "신발", "디지털", "가방", "뷰티", "라이프", "추천"];
 
@@ -75,39 +77,32 @@ export default function FloridaPage() {
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-2">
-            {products.map((p) => (
-              <article key={p.id} className="bg-white rounded-xl overflow-hidden border">
-                <Link href={`/florida/product/${p.id}`} onClick={() => pushRecent(p.id)}>
-                  {imageOverrides[p.id] || p.image ? <img src={imageOverrides[p.id] || p.image} alt={p.name} className="h-36 w-full object-cover" /> : <div className={`h-36 bg-gradient-to-br ${p.color}`} />}
-                </Link>
-                <div className="p-2.5">
-                  <p className="text-[11px] text-slate-400">{p.badge || "추천"}</p>
-                  <Link href={`/florida/product/${p.id}`} onClick={() => pushRecent(p.id)} className="text-sm font-semibold line-clamp-1 mt-0.5 block">{p.name}</Link>
-                  <div className="mt-1">
-                    <b className="text-xl leading-none">{p.price.toLocaleString("ko-KR")}</b>
-                    <span className="text-sm ml-0.5">원</span>
-                  </div>
-                  <div className="mt-1 flex justify-between items-center">
-                    <span className="text-[11px] text-slate-400">무료배송</span>
-                    <div className="flex gap-2 items-center">
-                      <button onClick={() => addCart(p.id)} className="text-xs border rounded px-2 py-0.5">담기</button>
-                      <button onClick={() => toggleWish(p.id)}>{wish[p.id] ? "❤️" : "🤍"}</button>
-                    </div>
-                  </div>
-                </div>
-              </article>
-            ))}
+            {products.map((p) => {
+              const rating = p.reviews.length ? p.reviews.reduce((acc, cur) => acc + cur.rating, 0) / p.reviews.length : 4.7;
+              return (
+                <ProductCard
+                  key={p.id}
+                  id={p.id}
+                  name={p.name}
+                  price={p.price}
+                  originalPrice={p.originalPrice}
+                  image={imageOverrides[p.id] || p.image}
+                  rating={rating}
+                  reviewCount={p.reviews.length || 1}
+                  shopName={p.badge || "플로리다 스타일"}
+                  isNew={p.badge === "오늘출발" || p.badge === "재입고"}
+                  colorClass={p.color}
+                  wished={Boolean(wish[p.id])}
+                  onToggleWish={() => toggleWish(p.id)}
+                  onOpen={() => pushRecent(p.id)}
+                  onAddCart={() => addCart(p.id)}
+                />
+              );
+            })}
           </div>
         </section>
 
-        <nav className="fixed bottom-0 inset-x-0 border-t bg-white">
-          <div className="max-w-md mx-auto grid grid-cols-4 text-center py-2 text-xs">
-            <Link href="/florida" className="text-pink-500 font-semibold">홈</Link>
-            <Link href="/florida/all">전체보기</Link>
-            <Link href="/florida">검색</Link>
-            <Link href="/florida/mypage">마이페이지</Link>
-          </div>
-        </nav>
+        <BottomNav />
       </div>
     </main>
   );
