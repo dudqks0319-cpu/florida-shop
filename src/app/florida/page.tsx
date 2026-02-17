@@ -1,14 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { FLORIDA_PRODUCTS } from "@/lib/florida-products";
 import { getCart, getWish, pushRecent, setCart, setWish } from "@/lib/florida-store";
 import { getBannerImage, getImageOverrides } from "@/lib/florida-admin";
 import ProductCard from "@/components/product/ProductCard";
 import BottomNav from "@/components/layout/BottomNav";
-
-const QUICK_MENUS = ["남자패션", "의류", "주얼리", "패션소품", "빅사이즈", "쿠폰", "신발", "디지털", "가방", "뷰티", "라이프", "추천"];
+import Header from "@/components/layout/Header";
+import HeroBanner from "@/components/home/HeroBanner";
+import CategoryBar from "@/components/home/CategoryBar";
+import TimeDeal from "@/components/home/TimeDeal";
 
 export default function FloridaPage() {
   const [wish, setWishState] = useState<Record<string, boolean>>(() => getWish());
@@ -40,35 +41,10 @@ export default function FloridaPage() {
           <button className="bg-white text-[#111] rounded-full px-3 py-1 text-xs font-semibold">앱에서 보기</button>
         </div>
 
-        <header className="px-3 py-3 border-b">
-          <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
-            <input className="bg-[#f1f3f5] rounded-xl px-4 py-2.5 text-sm" placeholder="하나만 사도 무료배송" />
-            <Link href="/florida/cart" className="text-sm font-semibold">장바구니 {cartCount}</Link>
-          </div>
-        </header>
-
-        <section className="text-white p-0">
-          {banner ? (
-            <img src={banner} alt="메인 배너" className="w-full h-40 object-cover" />
-          ) : (
-            <div className="bg-gradient-to-b from-[#4d8dff] to-[#5da8ff] p-4">
-              <p className="text-xs opacity-90">설 특집</p>
-              <h2 className="text-4xl font-black mt-2">99특가</h2>
-              <button className="mt-4 bg-white/20 rounded-full px-4 py-2 text-sm">지금 득템하기</button>
-            </div>
-          )}
-        </section>
-
-        <section className="px-3 py-4 border-b bg-white">
-          <div className="grid grid-cols-6 gap-y-4 text-center">
-            {QUICK_MENUS.map((m) => (
-              <button key={m} className="flex flex-col items-center gap-1">
-                <span className="text-lg">◻︎</span>
-                <span className="text-[11px] text-slate-700">{m}</span>
-              </button>
-            ))}
-          </div>
-        </section>
+        <Header cartCount={cartCount} />
+        <HeroBanner image={banner || undefined} />
+        <CategoryBar />
+        <TimeDeal />
 
         <section className="px-3 py-4">
           <div className="flex items-end justify-between">
