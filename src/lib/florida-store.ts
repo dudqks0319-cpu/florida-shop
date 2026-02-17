@@ -19,6 +19,9 @@ export type FloridaOrder = {
   deliveryRequest?: string;
   createdAt: string;
   status: FloridaOrderStatus;
+  claimType?: "refund" | "exchange";
+  claimReason?: string;
+  claimStatus?: "요청접수" | "처리중" | "완료" | "반려";
 };
 
 const KEY_WISH = "florida:wish";
@@ -90,6 +93,22 @@ export function addOrders(orders: FloridaOrder[]) {
 export function setOrderStatus(orderId: string, status: FloridaOrderStatus) {
   const cur = getOrders();
   const next = cur.map((o) => (o.id === orderId ? { ...o, status } : o));
+  safeSet(KEY_ORDERS, next);
+  return next;
+}
+
+export function requestOrderClaim(orderId: string, type: "refund" | "exchange", reason: string) {
+  const cur = getOrders();
+  const next = cur.map((o) =>
+    o.id === orderId
+      ? {
+          ...o,
+          claimType: type,
+          claimReason: reason,
+          claimStatus: "요청접수" as const,
+        }
+      : o,
+  );
   safeSet(KEY_ORDERS, next);
   return next;
 }

@@ -47,9 +47,14 @@ export default function FloridaMypage() {
               <p className="font-semibold text-sm">{o.productName}</p>
               <p className="text-xs text-slate-500">{new Date(o.createdAt).toLocaleString("ko-KR")}</p>
               <p className="text-sm mt-1">{o.amount.toLocaleString("ko-KR")}원 / {o.method} / {o.status}</p>
-              <button className="mt-2 text-xs border rounded px-2 py-1" onClick={() => nextStatus(o.id, o.status)}>
-                상태 다음 단계로
-              </button>
+              <div className="mt-2 flex gap-2">
+                <button className="text-xs border rounded px-2 py-1" onClick={() => nextStatus(o.id, o.status)}>
+                  상태 다음 단계로
+                </button>
+                <Link href={`/florida/orders/${o.id}`} className="text-xs border rounded px-2 py-1 bg-white">
+                  주문상세/환불/교환
+                </Link>
+              </div>
             </div>
           ))}
         </div>

@@ -1,13 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FLORIDA_PRODUCTS } from "@/lib/florida-products";
 import { getBannerImage, getImageOverrides, setBannerImage, setImageOverrides } from "@/lib/florida-admin";
+
+type Me = { user: { role: "requester" | "helper" | "admin" } | null };
 
 export default function FloridaAdminPage() {
   const [banner, setBanner] = useState(() => getBannerImage());
   const [overrides, setOverrides] = useState<Record<string, string>>(() => getImageOverrides());
   const [notice, setNotice] = useState("");
+  const [authorized, setAuthorized] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch("/api/auth/me");
+      const json = (await res.json()) as Me;
+      setAuthorized(Boolean(json.user && json.user.role === "admin"));
+    })();
+  }, []);
 
   const upload = async (file: File, onDone: (url: string) => void) => {
     const form = new FormData();
@@ -21,6 +32,9 @@ export default function FloridaAdminPage() {
     onDone(json.url);
     setNotice("업로드 완료");
   };
+
+  if (authorized === null) return <main className="max-w-2xl mx-auto p-4">권한 확인 중...</main>;
+  if (!authorized) return <main className="max-w-2xl mx-auto p-4">관리자 권한이 필요합니다.</main>;
 
   return (
     <main className="max-w-2xl mx-auto p-4 pb-20">

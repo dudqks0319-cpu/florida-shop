@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FLORIDA_PRODUCTS } from "@/lib/florida-products";
 import { addOrders, clearCart, getCart, type FloridaOrder } from "@/lib/florida-store";
 
@@ -28,6 +28,8 @@ export default function FloridaCheckoutPage() {
   const [deliveryRequest, setDeliveryRequest] = useState("문 앞에 두고 벨 눌러주세요");
   const [couponCode, setCouponCode] = useState("WELCOME3000");
   const [method, setMethod] = useState<"kakaopay" | "naverpay" | "tosspay" | "card">("kakaopay");
+  const [payMode, setPayMode] = useState<"mock" | "live">("mock");
+  const [methodReady, setMethodReady] = useState<Record<string, boolean>>({});
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -55,6 +57,15 @@ export default function FloridaCheckoutPage() {
   }, [couponCode, subtotal]);
   const total = Math.max(subtotal + shippingFee - couponDiscount, 0);
 
+  useEffect(() => {
+    (async () => {
+      const res = await fetch("/api/florida/payment/mode");
+      const json = await res.json();
+      setPayMode(json.mode || "mock");
+      setMethodReady(json.methodReady || {});
+    })();
+  }, []);
+
   const searchAddress = async () => {
     if (!addrKeyword.trim()) return;
     const res = await fetch(`/api/address/lookup?keyword=${encodeURIComponent(addrKeyword.trim())}`);
@@ -72,6 +83,9 @@ export default function FloridaCheckoutPage() {
     if (!receiverPhone.trim()) return setNotice("연락처를 입력해주세요.");
     if (!selectedAddr) return setNotice("도로명 주소를 선택해주세요.");
     if (!agree) return setNotice("약관 동의가 필요합니다.");
+    if (payMode === "live" && !methodReady[method]) {
+      return setNotice(`선택한 결제수단(${method})의 라이브 키 설정이 필요합니다.`);
+    }
 
     setBusy(true);
     const ready = await fetch("/api/florida/payment/ready", {
@@ -161,6 +175,7 @@ export default function FloridaCheckoutPage() {
       </section>
 
       <section className="mt-3 p-4 border rounded-xl bg-slate-50 text-sm">
+        <p className="mb-2 text-xs text-slate-500">결제모드: <b>{payMode === "live" ? "LIVE" : "MOCK"}</b></p>
         <div className="flex justify-between"><span>상품금액</span><b>{subtotal.toLocaleString("ko-KR")}원</b></div>
         <div className="flex justify-between mt-1"><span>배송비</span><b>{shippingFee.toLocaleString("ko-KR")}원</b></div>
         <div className="flex justify-between mt-1"><span>쿠폰할인</span><b>-{couponDiscount.toLocaleString("ko-KR")}원</b></div>
