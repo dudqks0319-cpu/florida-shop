@@ -3,28 +3,29 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { FLORIDA_PRODUCTS } from "@/lib/florida-products";
+import { getCart, getWish, pushRecent, setCart, setWish } from "@/lib/florida-store";
 
-const QUICK_MENUS = [
-  { icon: "👔", label: "남자패션" },
-  { icon: "👕", label: "의류" },
-  { icon: "💎", label: "주얼리" },
-  { icon: "🧢", label: "패션소품" },
-  { icon: "📏", label: "빅사이즈" },
-  { icon: "🎟️", label: "쿠폰" },
-  { icon: "👟", label: "신발" },
-  { icon: "📱", label: "디지털" },
-  { icon: "👜", label: "가방" },
-  { icon: "💄", label: "뷰티" },
-  { icon: "🏠", label: "라이프" },
-  { icon: "✨", label: "추천" },
-];
+const QUICK_MENUS = ["남자패션", "의류", "주얼리", "패션소품", "빅사이즈", "쿠폰", "신발", "디지털", "가방", "뷰티", "라이프", "추천"];
 
 export default function FloridaPage() {
-  const [wish, setWish] = useState<Record<string, boolean>>({});
+  const [wish, setWishState] = useState<Record<string, boolean>>(() => getWish());
+  const [cart, setCartState] = useState<Record<string, number>>(() => getCart());
 
   const products = useMemo(() => FLORIDA_PRODUCTS.slice(0, 8), []);
 
-  const toggleWish = (id: string) => setWish((prev) => ({ ...prev, [id]: !prev[id] }));
+  const cartCount = useMemo(() => Object.values(cart).reduce((a, b) => a + b, 0), [cart]);
+
+  const toggleWish = (id: string) => {
+    const next = { ...wish, [id]: !wish[id] };
+    setWishState(next);
+    setWish(next);
+  };
+
+  const addCart = (id: string) => {
+    const next = { ...cart, [id]: (cart[id] || 0) + 1 };
+    setCartState(next);
+    setCart(next);
+  };
 
   return (
     <main className="min-h-screen bg-[#f5f6f8]">
@@ -37,7 +38,7 @@ export default function FloridaPage() {
         <header className="px-3 py-3 border-b">
           <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
             <input className="bg-[#f1f3f5] rounded-xl px-4 py-2.5 text-sm" placeholder="하나만 사도 무료배송" />
-            <button className="text-2xl">👜</button>
+            <Link href="/florida/mypage" className="text-sm font-semibold">장바구니 {cartCount}</Link>
           </div>
         </header>
 
@@ -50,9 +51,9 @@ export default function FloridaPage() {
         <section className="px-3 py-4 border-b bg-white">
           <div className="grid grid-cols-6 gap-y-4 text-center">
             {QUICK_MENUS.map((m) => (
-              <button key={m.label} className="flex flex-col items-center gap-1">
-                <span className="text-xl">{m.icon}</span>
-                <span className="text-[11px] text-slate-700">{m.label}</span>
+              <button key={m} className="flex flex-col items-center gap-1">
+                <span className="text-lg">◻︎</span>
+                <span className="text-[11px] text-slate-700">{m}</span>
               </button>
             ))}
           </div>
@@ -66,20 +67,23 @@ export default function FloridaPage() {
 
           <div className="mt-3 grid grid-cols-2 gap-2">
             {products.map((p) => (
-              <article key={p.id} className="bg-white rounded-xl overflow-hidden">
-                <Link href={`/florida/product/${p.id}`}>
-                  <div className={`h-36 bg-gradient-to-br ${p.color}`} />
+              <article key={p.id} className="bg-white rounded-xl overflow-hidden border">
+                <Link href={`/florida/product/${p.id}`} onClick={() => pushRecent(p.id)}>
+                  {p.image ? <img src={p.image} alt={p.name} className="h-36 w-full object-cover" /> : <div className={`h-36 bg-gradient-to-br ${p.color}`} />}
                 </Link>
                 <div className="p-2.5">
                   <p className="text-[11px] text-slate-400">{p.badge || "추천"}</p>
-                  <Link href={`/florida/product/${p.id}`} className="text-sm font-semibold line-clamp-1 mt-0.5 block">{p.name}</Link>
+                  <Link href={`/florida/product/${p.id}`} onClick={() => pushRecent(p.id)} className="text-sm font-semibold line-clamp-1 mt-0.5 block">{p.name}</Link>
                   <div className="mt-1">
                     <b className="text-xl leading-none">{p.price.toLocaleString("ko-KR")}</b>
                     <span className="text-sm ml-0.5">원</span>
                   </div>
                   <div className="mt-1 flex justify-between items-center">
                     <span className="text-[11px] text-slate-400">무료배송</span>
-                    <button onClick={() => toggleWish(p.id)}>{wish[p.id] ? "❤️" : "🤍"}</button>
+                    <div className="flex gap-2 items-center">
+                      <button onClick={() => addCart(p.id)} className="text-xs border rounded px-2 py-0.5">담기</button>
+                      <button onClick={() => toggleWish(p.id)}>{wish[p.id] ? "❤️" : "🤍"}</button>
+                    </div>
                   </div>
                 </div>
               </article>
@@ -91,8 +95,8 @@ export default function FloridaPage() {
           <div className="max-w-md mx-auto grid grid-cols-4 text-center py-2 text-xs">
             <Link href="/florida" className="text-pink-500 font-semibold">홈</Link>
             <Link href="/florida/all">전체보기</Link>
-            <Link href="/florida" className="">검색</Link>
-            <Link href="/login">마이페이지</Link>
+            <Link href="/florida">검색</Link>
+            <Link href="/florida/mypage">마이페이지</Link>
           </div>
         </nav>
       </div>
