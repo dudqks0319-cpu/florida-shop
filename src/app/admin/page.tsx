@@ -1,147 +1,77 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import styles from "./admin.module.css";
+import { useState } from "react";
 
-type Summary = {
-  total: number;
-  open: number;
-  inProgress: number;
-  done: number;
-  cancelled: number;
-  completionRate: number;
-  cancelRate: number;
-  totalReward: number;
-  totalFee: number;
-  totalPayout: number;
-  penaltyTotal: number;
-  uniqueRequesters: number;
-  uniqueHelpers: number;
-};
+const recentOrders = [
+  { id: "ORD-2026-0217-001", customer: "김**", product: "오버핏 린넨 셔츠", amount: 39900, status: "결제완료", time: "5분 전" },
+  { id: "ORD-2026-0217-002", customer: "이**", product: "와이드 데님 팬츠", amount: 49900, status: "배송준비", time: "23분 전" },
+  { id: "ORD-2026-0217-003", customer: "박**", product: "크롭 가디건 세트", amount: 67800, status: "배송중", time: "1시간 전" },
+];
 
-type Errand = {
-  id: string;
-  title: string;
-  requester: string;
-  helper?: string;
-  rewardKrw: number;
-  status: "open" | "matched" | "in_progress" | "done" | "cancelled";
-  createdAt: string;
-};
+const topProducts = [
+  { name: "오버핏 린넨 셔츠", sales: 156, revenue: 6224400, stock: 23 },
+  { name: "와이드 데님 팬츠", sales: 134, revenue: 6686600, stock: 8 },
+  { name: "레더 숄더백", sales: 87, revenue: 7743000, stock: 3 },
+];
 
-const statusLabel: Record<Errand["status"], string> = {
-  open: "모집중",
-  matched: "매칭완료",
-  in_progress: "진행중",
-  done: "완료",
-  cancelled: "취소",
-};
-
-export default function AdminPage() {
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [recent, setRecent] = useState<Errand[]>([]);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    const load = async () => {
-      const res = await fetch("/api/admin/overview");
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error || "관리자 데이터를 불러오지 못했습니다.");
-        return;
-      }
-      setSummary(json.summary);
-      setRecent(json.recent || []);
-    };
-
-    load();
-  }, []);
+export default function AdminDashboardPage() {
+  const [period, setPeriod] = useState<"today" | "week" | "month">("today");
+  const stats = { totalSales: 2847000, orderCount: 47, visitorCount: 1283, conversionRate: 3.66 };
 
   return (
-    <main className={styles.page}>
-      <div className={styles.container}>
-        <section className={styles.hero}>
-          <div>
-            <h1 className={styles.title}>운영 대시보드</h1>
-            <p className={styles.sub}>심부름 거래 현황, 정산 지표, 리스크를 한 화면에서 관리합니다.</p>
+    <main className="max-w-6xl mx-auto p-4 pb-16">
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black">FLORIDA ADMIN</h1>
+          <p className="text-sm text-slate-500">관리자 대시보드</p>
+        </div>
+        <div className="flex gap-2 text-sm">
+          <Link href="/admin/products" className="px-3 py-2 border rounded-lg">상품 관리</Link>
+          <Link href="/admin/products/new" className="px-3 py-2 bg-[#FF6B35] text-white rounded-lg">상품 등록</Link>
+        </div>
+      </header>
+
+      <section className="mt-4 flex gap-2">
+        {(["today", "week", "month"] as const).map((p) => (
+          <button key={p} onClick={() => setPeriod(p)} className={`px-3 py-1.5 rounded-lg border text-sm ${period === p ? "bg-[#FF6B35] text-white" : "bg-white"}`}>
+            {p === "today" ? "오늘" : p === "week" ? "이번 주" : "이번 달"}
+          </button>
+        ))}
+      </section>
+
+      <section className="grid md:grid-cols-4 gap-3 mt-4">
+        <div className="p-4 border rounded-xl bg-white"><p className="text-xs text-slate-500">총 매출</p><p className="text-xl font-bold mt-1">{stats.totalSales.toLocaleString("ko-KR")}원</p></div>
+        <div className="p-4 border rounded-xl bg-white"><p className="text-xs text-slate-500">주문 수</p><p className="text-xl font-bold mt-1">{stats.orderCount}건</p></div>
+        <div className="p-4 border rounded-xl bg-white"><p className="text-xs text-slate-500">방문자</p><p className="text-xl font-bold mt-1">{stats.visitorCount.toLocaleString("ko-KR")}명</p></div>
+        <div className="p-4 border rounded-xl bg-white"><p className="text-xs text-slate-500">전환율</p><p className="text-xl font-bold mt-1">{stats.conversionRate}%</p></div>
+      </section>
+
+      <section className="grid md:grid-cols-2 gap-3 mt-4">
+        <div className="p-4 border rounded-xl bg-white">
+          <h2 className="font-bold">최근 주문</h2>
+          <div className="mt-2 space-y-2 text-sm">
+            {recentOrders.map((o) => (
+              <div key={o.id} className="p-2 border rounded-lg flex items-center justify-between">
+                <div><p className="font-semibold">{o.product}</p><p className="text-xs text-slate-500">{o.id} · {o.customer} · {o.time}</p></div>
+                <div className="text-right"><p className="font-semibold">{o.amount.toLocaleString("ko-KR")}원</p><p className="text-xs text-slate-500">{o.status}</p></div>
+              </div>
+            ))}
           </div>
-          <Link href="/" className={styles.link}>서비스 화면으로 이동</Link>
-        </section>
+        </div>
 
-        {error && <div className={`${styles.card} ${styles.warn}`}>⚠ {error}</div>}
-
-        {!error && summary && (
-          <>
-            <section className={styles.grid}>
-              <div className={styles.card}><p className={styles.label}>총 의뢰</p><p className={styles.value}>{summary.total}건</p></div>
-              <div className={styles.card}><p className={styles.label}>완료율</p><p className={styles.value}>{summary.completionRate}%</p></div>
-              <div className={styles.card}><p className={styles.label}>취소율</p><p className={styles.value}>{summary.cancelRate}%</p></div>
-              <div className={styles.card}><p className={styles.label}>누적 수수료</p><p className={styles.value}>{summary.totalFee.toLocaleString()}원</p></div>
-            </section>
-
-            <section className={styles.row}>
-              <div className={styles.card}>
-                <h2 className={styles.panelTitle}>운영 상태</h2>
-                <ul className={styles.list}>
-                  <li>모집중: <b>{summary.open}</b>건</li>
-                  <li>진행중: <b>{summary.inProgress}</b>건</li>
-                  <li>완료: <b>{summary.done}</b>건</li>
-                  <li>취소: <b>{summary.cancelled}</b>건</li>
-                  <li>활성 의뢰자 수: <b>{summary.uniqueRequesters}</b>명</li>
-                  <li>활성 수행자 수: <b>{summary.uniqueHelpers}</b>명</li>
-                </ul>
+        <div className="p-4 border rounded-xl bg-white">
+          <h2 className="font-bold">인기 상품 TOP</h2>
+          <div className="mt-2 space-y-2 text-sm">
+            {topProducts.map((p, i) => (
+              <div key={p.name} className="p-2 border rounded-lg flex items-center justify-between">
+                <div><p className="font-semibold">{i + 1}. {p.name}</p><p className="text-xs text-slate-500">{p.sales}개 판매</p></div>
+                <div className="text-right"><p>{p.revenue.toLocaleString("ko-KR")}원</p><p className={`text-xs ${p.stock < 10 ? "text-red-500" : "text-slate-500"}`}>재고 {p.stock}개</p></div>
               </div>
-              <div className={styles.card}>
-                <h2 className={styles.panelTitle}>정산/리스크</h2>
-                <ul className={styles.list}>
-                  <li>총 거래액: <b>{summary.totalReward.toLocaleString()}원</b></li>
-                  <li>수행자 지급 누적: <b>{summary.totalPayout.toLocaleString()}원</b></li>
-                  <li>패널티 누적: <b>{summary.penaltyTotal.toLocaleString()}원</b></li>
-                </ul>
-              </div>
-            </section>
-
-            <section className={styles.card}>
-              <h2 className={styles.panelTitle}>최근 의뢰 12건</h2>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>제목</th>
-                      <th>의뢰자</th>
-                      <th>수행자</th>
-                      <th>금액</th>
-                      <th>상태</th>
-                      <th>등록시각</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recent.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className={styles.empty}>아직 의뢰 데이터가 없습니다.</td>
-                      </tr>
-                    ) : (
-                      recent.map((e) => (
-                        <tr key={e.id}>
-                          <td>{e.title}</td>
-                          <td>{e.requester}</td>
-                          <td>{e.helper || "-"}</td>
-                          <td>{e.rewardKrw.toLocaleString()}원</td>
-                          <td>
-                            <span className={styles.badge}>{statusLabel[e.status]}</span>
-                          </td>
-                          <td>{new Date(e.createdAt).toLocaleString("ko-KR")}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </>
-        )}
-      </div>
+            ))}
+          </div>
+        </div>
+      </section>
     </main>
   );
 }
