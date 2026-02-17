@@ -4,12 +4,15 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { FLORIDA_PRODUCTS } from "@/lib/florida-products";
 import { getCart, getWish, pushRecent, setCart, setWish } from "@/lib/florida-store";
+import { getBannerImage, getImageOverrides } from "@/lib/florida-admin";
 
 const QUICK_MENUS = ["남자패션", "의류", "주얼리", "패션소품", "빅사이즈", "쿠폰", "신발", "디지털", "가방", "뷰티", "라이프", "추천"];
 
 export default function FloridaPage() {
   const [wish, setWishState] = useState<Record<string, boolean>>(() => getWish());
   const [cart, setCartState] = useState<Record<string, number>>(() => getCart());
+  const [banner] = useState(() => getBannerImage());
+  const [imageOverrides] = useState<Record<string, string>>(() => getImageOverrides());
 
   const products = useMemo(() => FLORIDA_PRODUCTS.slice(0, 8), []);
 
@@ -38,14 +41,20 @@ export default function FloridaPage() {
         <header className="px-3 py-3 border-b">
           <div className="grid grid-cols-[1fr_auto] gap-2 items-center">
             <input className="bg-[#f1f3f5] rounded-xl px-4 py-2.5 text-sm" placeholder="하나만 사도 무료배송" />
-            <Link href="/florida/mypage" className="text-sm font-semibold">장바구니 {cartCount}</Link>
+            <Link href="/florida/cart" className="text-sm font-semibold">장바구니 {cartCount}</Link>
           </div>
         </header>
 
-        <section className="bg-gradient-to-b from-[#4d8dff] to-[#5da8ff] text-white p-4">
-          <p className="text-xs opacity-90">설 특집</p>
-          <h2 className="text-4xl font-black mt-2">99특가</h2>
-          <button className="mt-4 bg-white/20 rounded-full px-4 py-2 text-sm">지금 득템하기</button>
+        <section className="text-white p-0">
+          {banner ? (
+            <img src={banner} alt="메인 배너" className="w-full h-40 object-cover" />
+          ) : (
+            <div className="bg-gradient-to-b from-[#4d8dff] to-[#5da8ff] p-4">
+              <p className="text-xs opacity-90">설 특집</p>
+              <h2 className="text-4xl font-black mt-2">99특가</h2>
+              <button className="mt-4 bg-white/20 rounded-full px-4 py-2 text-sm">지금 득템하기</button>
+            </div>
+          )}
         </section>
 
         <section className="px-3 py-4 border-b bg-white">
@@ -69,7 +78,7 @@ export default function FloridaPage() {
             {products.map((p) => (
               <article key={p.id} className="bg-white rounded-xl overflow-hidden border">
                 <Link href={`/florida/product/${p.id}`} onClick={() => pushRecent(p.id)}>
-                  {p.image ? <img src={p.image} alt={p.name} className="h-36 w-full object-cover" /> : <div className={`h-36 bg-gradient-to-br ${p.color}`} />}
+                  {imageOverrides[p.id] || p.image ? <img src={imageOverrides[p.id] || p.image} alt={p.name} className="h-36 w-full object-cover" /> : <div className={`h-36 bg-gradient-to-br ${p.color}`} />}
                 </Link>
                 <div className="p-2.5">
                   <p className="text-[11px] text-slate-400">{p.badge || "추천"}</p>

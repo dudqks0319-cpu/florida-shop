@@ -5,6 +5,7 @@ import { notFound, useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FLORIDA_PRODUCTS } from "@/lib/florida-products";
 import { addOrder, getCart, pushRecent, setCart, type FloridaOrder } from "@/lib/florida-store";
+import { getImageOverrides } from "@/lib/florida-admin";
 
 const METHOD_LABEL: Record<string, string> = {
   kakaopay: "카카오페이",
@@ -23,6 +24,7 @@ export default function FloridaProductDetail() {
   const [method, setMethod] = useState<"kakaopay" | "naverpay" | "tosspay" | "card">("kakaopay");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [imageOverrides] = useState<Record<string, string>>(() => getImageOverrides());
 
   const product = FLORIDA_PRODUCTS.find((p) => p.id === id);
 
@@ -71,7 +73,7 @@ export default function FloridaProductDetail() {
       method,
       buyerName: buyerName.trim(),
       createdAt: new Date().toISOString(),
-      status: "주문완료",
+      status: "배송준비",
     };
     addOrder(order);
 
@@ -87,7 +89,7 @@ export default function FloridaProductDetail() {
         <button onClick={() => router.push("/florida/mypage")} className="text-sm">마이페이지</button>
       </div>
 
-      {product.image ? <img src={product.image} alt={product.name} className="mt-3 h-72 w-full object-cover rounded-2xl" /> : <div className={`mt-3 h-72 rounded-2xl bg-gradient-to-br ${product.color}`} />}
+      {imageOverrides[product.id] || product.image ? <img src={imageOverrides[product.id] || product.image} alt={product.name} className="mt-3 h-72 w-full object-cover rounded-2xl" /> : <div className={`mt-3 h-72 rounded-2xl bg-gradient-to-br ${product.color}`} />}
 
       <p className="mt-4 text-xs text-blue-600 font-semibold">{product.category}</p>
       <h1 className="text-2xl font-extrabold mt-1">{product.name}</h1>

@@ -1,3 +1,5 @@
+export type FloridaOrderStatus = "결제대기" | "주문완료" | "배송준비" | "배송중" | "배송완료";
+
 export type FloridaOrder = {
   id: string;
   productId: string;
@@ -9,7 +11,7 @@ export type FloridaOrder = {
   method: "kakaopay" | "naverpay" | "tosspay" | "card";
   buyerName: string;
   createdAt: string;
-  status: "결제대기" | "주문완료";
+  status: FloridaOrderStatus;
 };
 
 const KEY_WISH = "florida:wish";
@@ -45,6 +47,14 @@ export function getCart() {
 export function setCart(v: Record<string, number>) {
   safeSet(KEY_CART, v);
 }
+export function updateCartQty(productId: string, qty: number) {
+  const cur = getCart();
+  const next = { ...cur };
+  if (qty <= 0) delete next[productId];
+  else next[productId] = qty;
+  setCart(next);
+  return next;
+}
 
 export function getRecent() {
   return safeGet<string[]>(KEY_RECENT, []);
@@ -61,4 +71,11 @@ export function getOrders() {
 export function addOrder(order: FloridaOrder) {
   const cur = getOrders();
   safeSet(KEY_ORDERS, [order, ...cur]);
+}
+
+export function setOrderStatus(orderId: string, status: FloridaOrderStatus) {
+  const cur = getOrders();
+  const next = cur.map((o) => (o.id === orderId ? { ...o, status } : o));
+  safeSet(KEY_ORDERS, next);
+  return next;
 }
