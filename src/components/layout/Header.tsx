@@ -20,6 +20,7 @@ export default function Header({ cartCount }: HeaderProps) {
         </Link>
         <div className="flex items-center gap-2 text-sm">
           <Link href="/florida/all" className="text-slate-600">카테고리</Link>
+          <Link href="/florida/virtual-tryon" className="text-[#FF6B35] font-semibold">가상피팅</Link>
           <Link href="/florida/cart" className="font-semibold">장바구니 {cartCount}</Link>
         </div>
       </div>

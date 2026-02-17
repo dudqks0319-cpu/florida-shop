@@ -128,6 +128,9 @@ export default function FloridaProductDetail() {
             {busy ? "결제 준비중..." : `${METHOD_LABEL[method]} 결제`}
           </button>
         </div>
+        <Link href={`/florida/virtual-tryon?productId=${product.id}`} className="mt-2 block text-center rounded-xl border border-[#FF6B35] text-[#FF6B35] py-2.5 font-semibold">
+          가상피팅 해보기
+        </Link>
         {notice && <p className="text-sm text-rose-600 mt-2">{notice}</p>}
       </section>
 
