@@ -3,10 +3,20 @@ import path from "path";
 
 export type UserRole = "requester" | "helper" | "admin";
 
+export type AuthProvider = "email" | "kakao" | "google" | "naver";
+
 export type AppUser = {
   id: string;
   name: string;
   role: UserRole;
+  email?: string;
+  passwordHash?: string;
+  provider?: AuthProvider;
+  birthDate?: string; // YYYY-MM-DD
+  address?: string;
+  apartment?: string;
+  dong?: string;
+  neighborhoodVerifiedAt?: string;
   createdAt: string;
 };
 
@@ -102,7 +112,11 @@ export async function readDB(): Promise<DB> {
     const raw = await fs.readFile(dbFile, "utf-8");
     const parsed = JSON.parse(raw) as Partial<DB>;
     return {
-      users: parsed.users || [],
+      users: (parsed.users || []).map((u) => ({
+        ...u,
+        email: u.email ? String(u.email).toLowerCase() : undefined,
+        provider: (u.provider as AuthProvider | undefined) || (u.passwordHash ? "email" : undefined),
+      })),
       sessions: parsed.sessions || [],
       errands: (parsed.errands || []).map((e) => ({
         ...e,

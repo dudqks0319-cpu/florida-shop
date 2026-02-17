@@ -12,6 +12,9 @@ export async function POST(req: NextRequest) {
     if (currentUser.role !== "requester" && currentUser.role !== "admin") {
       return NextResponse.json({ error: "의뢰자 권한으로만 인증코드 발급이 가능합니다." }, { status: 403 });
     }
+    if (!currentUser.apartment || !currentUser.dong || !currentUser.address) {
+      return NextResponse.json({ error: "회원가입 시 입력한 주소(아파트/동) 정보가 필요합니다." }, { status: 400 });
+    }
 
     const ip = getClientIp(req);
     const byMinute = limitSmsPerMinute(ip);
@@ -30,18 +33,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
-    const requester = String(body?.requester || "").trim();
-    const apartment = String(body?.apartment || "").trim();
-    const dong = String(body?.dong || "").trim();
-
-    if (!requester || !apartment || !dong) {
-      return NextResponse.json({ error: "이름, 아파트명, 동네 정보가 필요합니다." }, { status: 400 });
-    }
-    if (requester !== currentUser.name) {
-      return NextResponse.json({ error: "로그인 계정 이름과 의뢰자 이름이 일치해야 합니다." }, { status: 403 });
-    }
-
     const db = await readDB();
     const requestId = makeId();
     const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -49,9 +40,9 @@ export async function POST(req: NextRequest) {
 
     db.verifications.unshift({
       id: requestId,
-      requester,
-      apartment,
-      dong,
+      requester: currentUser.name,
+      apartment: currentUser.apartment,
+      dong: currentUser.dong,
       code,
       expiresAt,
       verified: false,
@@ -65,6 +56,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       requestId,
+      apartment: currentUser.apartment,
+      dong: currentUser.dong,
       message: allowDemoCode
         ? "인증코드가 발급되었습니다. (데모 모드: 코드가 응답에 포함됩니다)"
         : "인증코드가 발급되었습니다. 운영 모드에서는 코드가 응답에 노출되지 않습니다.",

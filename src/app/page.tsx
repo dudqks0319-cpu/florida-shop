@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import NaverMap from "@/components/NaverMap";
 
@@ -17,6 +18,12 @@ type CurrentUser = {
   id: string;
   name: string;
   role: "requester" | "helper" | "admin";
+  email?: string;
+  provider?: "email" | "kakao" | "google" | "naver";
+  apartment?: string;
+  dong?: string;
+  address?: string;
+  neighborhoodVerifiedAt?: string;
 };
 
 type Errand = {
@@ -167,7 +174,11 @@ export default function Home() {
       const json = await res.json();
       setCurrentUser(json.user || null);
       if (json.user?.name) {
-        setForm((prev) => ({ ...prev, requester: json.user.name }));
+        setForm((prev) => ({
+          ...prev,
+          requester: json.user.name,
+          apartment: json.user.apartment || prev.apartment,
+        }));
       }
     } catch {
       // 세션 없는 경우 무시
@@ -328,24 +339,20 @@ export default function Home() {
   };
 
   const issueNeighborhoodCode = async () => {
-    if (!selectedAddr) {
-      setNotice({ type: "error", text: "먼저 주소/아파트를 선택해주세요." });
+    if (!currentUser) {
+      setNotice({ type: "error", text: "로그인 후 동네 인증이 가능합니다." });
       return;
     }
-    if (!form.requester.trim()) {
-      setNotice({ type: "error", text: "의뢰자 이름을 먼저 입력해주세요." });
+    if (!currentUser.apartment || !currentUser.dong) {
+      setNotice({ type: "error", text: "회원가입 페이지에서 주소지(아파트/동)를 먼저 등록해주세요." });
       return;
     }
 
-    const apartment = selectedAddr.bdNm || selectedAddr.roadAddr;
-    const dong = `${selectedAddr.siNm} ${selectedAddr.sggNm} ${selectedAddr.emdNm}`.trim();
-
-    setForm((prev) => ({ ...prev, apartment }));
+    setForm((prev) => ({ ...prev, apartment: currentUser.apartment || prev.apartment }));
     setBusy(true);
     const res = await fetch("/api/neighborhood/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requester: form.requester.trim(), apartment, dong }),
     });
     const json = await res.json();
     if (!res.ok) {
@@ -423,20 +430,26 @@ export default function Home() {
             <button disabled={busy} onClick={logout} className="btn-secondary mt-2">로그아웃</button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_110px] gap-2.5 mt-3">
-            <input
-              placeholder="로그인 이름"
-              value={loginName}
-              onChange={(e) => setLoginName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && login()}
-              className="input-field"
-            />
-            <select value={loginRole} onChange={(e) => setLoginRole(e.target.value as CurrentUser["role"])} className="input-field">
-              <option value="requester">의뢰자</option>
-              <option value="helper">수행자</option>
-              <option value="admin">관리자</option>
-            </select>
-            <button disabled={busy} onClick={login} className="btn-primary">{busy ? "처리중..." : "로그인"}</button>
+          <div className="grid gap-2.5 mt-3">
+            <p className="text-sm text-slate-600">
+              이메일/소셜 로그인은 <Link href="/login" className="text-blue-600 underline">로그인 페이지</Link>,
+              신규 가입은 <Link href="/signup" className="text-blue-600 underline">회원가입 페이지</Link>에서 진행하세요.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_110px] gap-2.5">
+              <input
+                placeholder="(레거시) 로그인 이름"
+                value={loginName}
+                onChange={(e) => setLoginName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && login()}
+                className="input-field"
+              />
+              <select value={loginRole} onChange={(e) => setLoginRole(e.target.value as CurrentUser["role"])} className="input-field">
+                <option value="requester">의뢰자</option>
+                <option value="helper">수행자</option>
+                <option value="admin">관리자</option>
+              </select>
+              <button disabled={busy} onClick={login} className="btn-primary">{busy ? "처리중..." : "로그인"}</button>
+            </div>
           </div>
         )}
       </section>
@@ -449,7 +462,7 @@ export default function Home() {
             <p className="font-medium">인증된 동네: <b>{verifiedDongne}</b></p>
           </div>
         ) : (
-          <p className="mt-2 text-slate-500 text-sm">주소/아파트 검색 후 인증코드를 발급받아 동네를 인증하세요.</p>
+          <p className="mt-2 text-slate-500 text-sm">회원가입 시 등록한 주소지(아파트/동) 기준으로 인증코드를 발급해 동네를 인증하세요.</p>
         )}
 
         {/* Step 1: 주소 검색 */}
@@ -489,13 +502,13 @@ export default function Home() {
         )}
 
         {/* Step 2: 인증코드 발급 */}
-        {selectedAddr && !verifiedDongne && (
+        {!verifiedDongne && (
           <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
             <p className="text-sm text-slate-600 mb-2">
-              선택: <b>{selectedAddr.bdNm || selectedAddr.roadAddr}</b>
+              가입 주소지: <b>{currentUser?.apartment || "(로그인 필요)"}</b> / {currentUser?.dong || "-"}
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <button disabled={busy} onClick={issueNeighborhoodCode} className="btn-primary">
+              <button disabled={busy || !currentUser} onClick={issueNeighborhoodCode} className="btn-primary">
                 {busy ? "발급중..." : "인증코드 발급"}
               </button>
               {demoCode && <span className="text-slate-600 text-sm">데모코드: <b>{demoCode}</b></span>}
@@ -564,7 +577,13 @@ export default function Home() {
             onChange={(e) => setForm({ ...form, requester: e.target.value })}
             className={`input-field ${currentUser ? "bg-slate-50 text-slate-500" : ""}`}
           />
-          <input placeholder="아파트/동" value={form.apartment} onChange={(e) => setForm({ ...form, apartment: e.target.value })} className="input-field" />
+          <input
+            placeholder="아파트/동"
+            value={form.apartment}
+            onChange={(e) => setForm({ ...form, apartment: e.target.value })}
+            disabled={Boolean(currentUser?.apartment)}
+            className="input-field"
+          />
           <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="input-field">
             <option value="convenience">편의점</option>
             <option value="delivery">배달/수령</option>

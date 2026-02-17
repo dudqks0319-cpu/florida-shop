@@ -48,6 +48,12 @@ export async function POST(req: NextRequest) {
     if (requester !== currentUser.name) {
       return NextResponse.json({ error: "로그인 계정 이름과 의뢰자 이름이 일치해야 합니다." }, { status: 403 });
     }
+    if (currentUser.apartment && apartment !== currentUser.apartment) {
+      return NextResponse.json({ error: "회원가입한 주소지(아파트)로만 의뢰를 등록할 수 있습니다." }, { status: 403 });
+    }
+    if (!currentUser.neighborhoodVerifiedAt) {
+      return NextResponse.json({ error: "동네 인증 완료 후 의뢰를 등록할 수 있습니다." }, { status: 403 });
+    }
     if (title.length > 80) {
       return NextResponse.json({ error: "제목은 80자 이내로 입력해주세요." }, { status: 400 });
     }

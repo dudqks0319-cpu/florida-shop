@@ -12,6 +12,13 @@ export async function GET(req: NextRequest) {
       id: user.id,
       name: user.name,
       role: user.role,
+      email: user.email,
+      provider: user.provider,
+      birthDate: user.birthDate,
+      address: user.address,
+      apartment: user.apartment,
+      dong: user.dong,
+      neighborhoodVerifiedAt: user.neighborhoodVerifiedAt,
     },
   });
 }
