@@ -217,6 +217,11 @@ export default function Home() {
   const logout = async () => {
     setBusy(true);
     await fetch("/api/auth/logout", { method: "POST" });
+    const isOAuthUser = currentUser?.provider && ["kakao", "google", "naver"].includes(currentUser.provider);
+    if (isOAuthUser) {
+      window.location.href = "/api/auth/signout?callbackUrl=/";
+      return;
+    }
     setCurrentUser(null);
     setNotice({ type: "ok", text: "로그아웃 되었습니다." });
     setBusy(false);

@@ -4,13 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-type SocialProvider = "kakao" | "google" | "naver";
-
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [socialEmail, setSocialEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -31,27 +28,14 @@ export default function LoginPage() {
     router.push("/");
   };
 
-  const loginSocial = async (provider: SocialProvider) => {
-    setBusy(true);
-    setNotice("");
-    const res = await fetch("/api/auth/social-login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider, email: socialEmail }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setNotice(json.error || "소셜 로그인 실패");
-      setBusy(false);
-      return;
-    }
-    router.push("/");
+  const oauthLogin = (provider: "kakao" | "google" | "naver") => {
+    window.location.href = `/api/auth/signin?provider=${provider}&callbackUrl=/`;
   };
 
   return (
     <main className="max-w-xl mx-auto p-5">
       <h1 className="text-2xl font-bold">로그인</h1>
-      <p className="text-sm text-slate-500 mt-1">이메일 로그인 또는 소셜 계정 로그인</p>
+      <p className="text-sm text-slate-500 mt-1">이메일 로그인 또는 OAuth(카카오/구글/네이버) 로그인</p>
 
       <section className="mt-4 p-4 border rounded-xl bg-white">
         <h2 className="font-semibold">이메일 로그인</h2>
@@ -63,13 +47,12 @@ export default function LoginPage() {
       </section>
 
       <section className="mt-3 p-4 border rounded-xl bg-white">
-        <h2 className="font-semibold">소셜 로그인</h2>
-        <p className="text-xs text-slate-500 mt-1">가입 시 사용한 이메일을 입력하세요.</p>
-        <input className="border rounded-lg px-3 py-2 mt-2 w-full" placeholder="소셜 가입 이메일" value={socialEmail} onChange={(e) => setSocialEmail(e.target.value)} />
+        <h2 className="font-semibold">OAuth 로그인</h2>
+        <p className="text-xs text-slate-500 mt-1">실제 카카오/구글/네이버 OAuth 인증으로 로그인합니다.</p>
         <div className="mt-2 grid grid-cols-3 gap-2">
-          <button onClick={() => loginSocial("kakao")} disabled={busy} className="rounded-lg px-3 py-2 bg-yellow-300">카카오</button>
-          <button onClick={() => loginSocial("google")} disabled={busy} className="rounded-lg px-3 py-2 bg-slate-100">구글</button>
-          <button onClick={() => loginSocial("naver")} disabled={busy} className="rounded-lg px-3 py-2 bg-green-500 text-white">네이버</button>
+          <button onClick={() => oauthLogin("kakao")} disabled={busy} className="rounded-lg px-3 py-2 bg-yellow-300">카카오</button>
+          <button onClick={() => oauthLogin("google")} disabled={busy} className="rounded-lg px-3 py-2 bg-slate-100">구글</button>
+          <button onClick={() => oauthLogin("naver")} disabled={busy} className="rounded-lg px-3 py-2 bg-green-500 text-white">네이버</button>
         </div>
       </section>
 
