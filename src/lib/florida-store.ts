@@ -2,6 +2,7 @@ export type FloridaOrderStatus = "결제대기" | "주문완료" | "배송준비
 
 export type FloridaOrder = {
   id: string;
+  orderGroupId?: string;
   productId: string;
   productName: string;
   productImage?: string;
@@ -10,6 +11,12 @@ export type FloridaOrder = {
   amount: number;
   method: "kakaopay" | "naverpay" | "tosspay" | "card";
   buyerName: string;
+  receiverName?: string;
+  receiverPhone?: string;
+  roadAddress?: string;
+  detailAddress?: string;
+  zipNo?: string;
+  deliveryRequest?: string;
   createdAt: string;
   status: FloridaOrderStatus;
 };
@@ -47,6 +54,9 @@ export function getCart() {
 export function setCart(v: Record<string, number>) {
   safeSet(KEY_CART, v);
 }
+export function clearCart() {
+  safeSet(KEY_CART, {});
+}
 export function updateCartQty(productId: string, qty: number) {
   const cur = getCart();
   const next = { ...cur };
@@ -71,6 +81,10 @@ export function getOrders() {
 export function addOrder(order: FloridaOrder) {
   const cur = getOrders();
   safeSet(KEY_ORDERS, [order, ...cur]);
+}
+export function addOrders(orders: FloridaOrder[]) {
+  const cur = getOrders();
+  safeSet(KEY_ORDERS, [...orders, ...cur]);
 }
 
 export function setOrderStatus(orderId: string, status: FloridaOrderStatus) {

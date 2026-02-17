@@ -57,6 +57,9 @@ export default function FloridaCartPage() {
 
       <div className="mt-4 p-4 rounded-xl border bg-slate-50">
         <p className="font-semibold">총 결제예상금액: {total.toLocaleString("ko-KR")}원</p>
+        <Link href="/florida/checkout" className="mt-3 inline-block w-full text-center rounded-lg bg-blue-600 text-white py-2.5 font-semibold">
+          주문/결제로 이동
+        </Link>
       </div>
     </main>
   );
