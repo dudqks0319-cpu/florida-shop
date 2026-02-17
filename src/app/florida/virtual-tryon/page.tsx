@@ -13,16 +13,25 @@ export default function VirtualTryOnPage() {
   });
   const [selfiePreview, setSelfiePreview] = useState("");
   const [selfieName, setSelfieName] = useState("");
+  const [selfieDataUrl, setSelfieDataUrl] = useState("");
   const [resultUrl, setResultUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
   const selected = useMemo(() => FLORIDA_PRODUCTS.find((p) => p.id === productId), [productId]);
 
-  const onPickSelfie = (file?: File) => {
+  const onPickSelfie = async (file?: File) => {
     if (!file) return;
     setSelfieName(file.name);
     setSelfiePreview(URL.createObjectURL(file));
+
+    const reader = new FileReader();
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("이미지 읽기 실패"));
+      reader.readAsDataURL(file);
+    });
+    setSelfieDataUrl(dataUrl);
   };
 
   const generate = async () => {
@@ -31,7 +40,7 @@ export default function VirtualTryOnPage() {
     const res = await fetch("/api/virtual-tryon", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ productId, selfieName }),
+      body: JSON.stringify({ productId, selfieName, selfieDataUrl }),
     });
     const json = await res.json();
     if (!res.ok) {
@@ -40,7 +49,7 @@ export default function VirtualTryOnPage() {
       return;
     }
     setResultUrl(json.resultImageUrl || "");
-    setNotice(json.message || "생성 완료");
+    setNotice(`${json.message || "생성 완료"} (${String(json.mode || "mock").toUpperCase()})`);
     setBusy(false);
   };
 
