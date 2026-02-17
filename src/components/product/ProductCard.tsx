@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import OptionBottomSheet from "@/components/product/OptionBottomSheet";
 
 type ProductCardProps = {
   id: string;
@@ -19,6 +20,7 @@ type ProductCardProps = {
   onToggleWish?: () => void;
   onOpen?: () => void;
   onAddCart?: () => void;
+  hasOptions?: boolean;
 };
 
 export default function ProductCard({
@@ -36,8 +38,10 @@ export default function ProductCard({
   onToggleWish,
   onOpen,
   onAddCart,
+  hasOptions = true,
 }: ProductCardProps) {
   const [localWish, setLocalWish] = useState(false);
+  const [openOption, setOpenOption] = useState(false);
   const isWished = wished ?? localWish;
   const discountRate = originalPrice ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
 
@@ -86,9 +90,27 @@ export default function ProductCard({
             <span className="text-amber-500">★</span>
             {rating.toFixed(1)} ({reviewCount})
           </p>
-          <button onClick={onAddCart} className="text-xs border rounded px-2 py-0.5">담기</button>
+          <button onClick={() => (hasOptions ? setOpenOption(true) : onAddCart?.())} className="text-xs border rounded px-2 py-0.5">담기</button>
         </div>
       </div>
+      <OptionBottomSheet
+        isOpen={openOption}
+        onClose={() => setOpenOption(false)}
+        product={{ id, name, price, originalPrice }}
+        options={{
+          colors: [
+            { name: "화이트", code: "#fff" },
+            { name: "블랙", code: "#111" },
+            { name: "네이비", code: "#1B2D45" },
+          ],
+          sizes: ["S", "M", "L", "XL"],
+        }}
+        onAddToCart={() => onAddCart?.()}
+        onBuyNow={() => {
+          onAddCart?.();
+          window.location.href = "/florida/checkout";
+        }}
+      />
     </article>
   );
 }

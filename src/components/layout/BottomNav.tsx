@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation";
 
 const navItems = [
   { href: "/florida", label: "홈" },
-  { href: "/florida/all", label: "전체보기" },
-  { href: "/florida/cart", label: "장바구니" },
+  { href: "/florida/all", label: "카테고리" },
+  { href: "/florida/welcome", label: "혜택" },
+  { href: "/florida/mypage", label: "찜" },
   { href: "/florida/mypage", label: "마이페이지" },
 ];
 
@@ -14,15 +15,15 @@ export default function BottomNav() {
   const pathname = usePathname();
   if (!pathname) return null;
 
-  if (pathname.startsWith("/admin") || pathname.startsWith("/florida/admin")) {
+  if (pathname.startsWith("/admin") || pathname.startsWith("/florida/admin") || pathname.startsWith("/florida/checkout")) {
     return null;
   }
 
   return (
     <nav className="fixed bottom-0 inset-x-0 border-t bg-white/95 backdrop-blur">
-      <div className="max-w-md mx-auto grid grid-cols-4 text-center py-2 text-xs">
+      <div className="max-w-md mx-auto grid grid-cols-5 text-center py-2 text-xs">
         {navItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = item.href === "/florida" ? pathname === "/florida" : pathname.startsWith(item.href);
           return (
             <Link key={item.href} href={item.href} className={isActive ? "text-pink-500 font-semibold" : "text-slate-600"}>
               {item.label}

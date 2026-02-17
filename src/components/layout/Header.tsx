@@ -1,13 +1,18 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import SearchModal from "@/components/common/SearchModal";
 
 type HeaderProps = {
   cartCount: number;
 };
 
 export default function Header({ cartCount }: HeaderProps) {
+  const [showSearch, setShowSearch] = useState(false);
+
   return (
+    <>
     <header className="px-3 py-3 border-b bg-white sticky top-0 z-20">
       <div className="flex items-center justify-between gap-2">
         <Link href="/florida" className="text-lg font-black tracking-tight text-[#1B2D45]">
@@ -19,9 +24,11 @@ export default function Header({ cartCount }: HeaderProps) {
         </div>
       </div>
       <div className="mt-2 grid grid-cols-[1fr_auto] gap-2 items-center">
-        <input className="bg-[#f1f3f5] rounded-xl px-4 py-2.5 text-sm" placeholder="하나만 사도 무료배송" />
-        <button className="text-xs px-3 py-2 rounded-lg border">검색</button>
+        <button onClick={() => setShowSearch(true)} className="bg-[#f1f3f5] rounded-xl px-4 py-2.5 text-sm text-left text-slate-500">하나만 사도 무료배송</button>
+        <button onClick={() => setShowSearch(true)} className="text-xs px-3 py-2 rounded-lg border">검색</button>
       </div>
     </header>
+    <SearchModal isOpen={showSearch} onClose={() => setShowSearch(false)} />
+    </>
   );
 }
