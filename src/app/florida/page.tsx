@@ -1,139 +1,100 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
+import { FLORIDA_PRODUCTS, type FloridaCategory } from "@/lib/florida-products";
 
-type Product = {
-  id: string;
-  name: string;
-  category: "구제" | "영캐주얼" | "잡화" | "모자";
-  price: number;
-  desc: string;
-};
-
-const PRODUCTS: Product[] = [
-  { id: "v1", name: "빈티지 데님 자켓", category: "구제", price: 49000, desc: "워싱 포인트, 유니섹스 핏" },
-  { id: "v2", name: "Y2K 카고 팬츠", category: "영캐주얼", price: 39000, desc: "와이드 실루엣, 데일리 코디" },
-  { id: "v3", name: "레터링 볼캡", category: "모자", price: 19000, desc: "사계절 착용 가능한 기본 캡" },
-  { id: "v4", name: "캔버스 숄더백", category: "잡화", price: 29000, desc: "수납 넉넉한 데일리 백" },
-  { id: "v5", name: "크롭 후드 집업", category: "영캐주얼", price: 42000, desc: "가벼운 소재, 간절기 추천" },
-  { id: "v6", name: "체인 키링 세트", category: "잡화", price: 12000, desc: "포인트 액세서리 3종" },
-];
-
-const METHOD_LABEL: Record<string, string> = {
-  kakaopay: "카카오페이",
-  naverpay: "네이버페이",
-  tosspay: "토스페이",
-  card: "카드",
-};
+const CATEGORIES: FloridaCategory[] = ["전체", "구제", "영캐주얼", "잡화", "모자"];
 
 export default function FloridaPage() {
-  const [cart, setCart] = useState<Record<string, number>>({});
-  const [paymentMethod, setPaymentMethod] = useState<"kakaopay" | "naverpay" | "tosspay" | "card">("kakaopay");
-  const [buyerName, setBuyerName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string>("");
+  const [activeCategory, setActiveCategory] = useState<FloridaCategory>("전체");
+  const [keyword, setKeyword] = useState("");
+  const [wish, setWish] = useState<Record<string, boolean>>({});
 
-  const items = useMemo(() =>
-    PRODUCTS.filter((p) => (cart[p.id] || 0) > 0).map((p) => ({ ...p, qty: cart[p.id] })),
-  [cart]);
-
-  const total = useMemo(() => items.reduce((sum, i) => sum + i.price * i.qty, 0), [items]);
-
-  const add = (id: string) => setCart((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
-  const sub = (id: string) =>
-    setCart((prev) => {
-      const next = { ...prev };
-      next[id] = Math.max((next[id] || 0) - 1, 0);
-      if (next[id] === 0) delete next[id];
-      return next;
+  const products = useMemo(() => {
+    return FLORIDA_PRODUCTS.filter((p) => {
+      const byCategory = activeCategory === "전체" || p.category === activeCategory;
+      const k = keyword.trim().toLowerCase();
+      const byKeyword = !k || p.name.toLowerCase().includes(k) || p.desc.toLowerCase().includes(k);
+      return byCategory && byKeyword;
     });
+  }, [activeCategory, keyword]);
 
-  const checkout = async () => {
-    if (!buyerName.trim()) {
-      setNotice("주문자 이름을 입력해주세요.");
-      return;
-    }
-    if (!items.length) {
-      setNotice("상품을 1개 이상 담아주세요.");
-      return;
-    }
-
-    setBusy(true);
-    setNotice("");
-
-    const orderName = `${buyerName.trim()}님의 플로리다 주문`;
-    const res = await fetch("/api/florida/payment/ready", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ method: paymentMethod, amount: total, orderName }),
-    });
-    const json = await res.json();
-
-    if (!res.ok) {
-      setNotice(json.error || "결제 준비 실패");
-      setBusy(false);
-      return;
-    }
-
-    setNotice(`${METHOD_LABEL[paymentMethod]} 결제창으로 이동합니다.`);
-    window.open(json.checkoutUrl, "_blank", "noopener,noreferrer");
-    setBusy(false);
-  };
+  const toggleWish = (id: string) => setWish((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (
-    <main className="max-w-6xl mx-auto px-4 py-8 pb-20">
-      <h1 className="text-4xl font-black tracking-tight">플로리다 옷가게</h1>
-      <p className="mt-2 text-slate-600">구제옷 · 영캐주얼 의류 · 모자 · 잡화를 한 번에.</p>
+    <main className="min-h-screen bg-slate-50 pb-24">
+      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-slate-200">
+        <div className="max-w-6xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-black tracking-tight">플로리다</h1>
+            <div className="text-xs text-slate-500">에이블리 감성 쇼핑</div>
+          </div>
+          <input
+            className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm"
+            placeholder="오늘 뭐 입지? 상품 검색"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+          />
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+            {CATEGORIES.map((c) => (
+              <button
+                key={c}
+                onClick={() => setActiveCategory(c)}
+                className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap border ${
+                  activeCategory === c
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-700 border-slate-200"
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {PRODUCTS.map((p) => (
-          <article key={p.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs text-blue-600 font-semibold">{p.category}</p>
-            <h3 className="mt-1 font-bold text-lg">{p.name}</h3>
-            <p className="mt-1 text-sm text-slate-500">{p.desc}</p>
-            <p className="mt-3 font-extrabold text-xl">{p.price.toLocaleString("ko-KR")}원</p>
-            <div className="mt-3 flex items-center gap-2">
-              <button onClick={() => sub(p.id)} className="rounded-lg border px-3 py-1.5">-</button>
-              <span className="min-w-8 text-center">{cart[p.id] || 0}</span>
-              <button onClick={() => add(p.id)} className="rounded-lg bg-slate-900 text-white px-3 py-1.5">+</button>
+      <section className="max-w-6xl mx-auto px-4 mt-4">
+        <div className="rounded-2xl bg-gradient-to-r from-pink-500 to-violet-500 text-white p-5">
+          <p className="text-xs opacity-90">NEW DROP</p>
+          <h2 className="text-2xl font-extrabold mt-1">영캐주얼 주간 특가</h2>
+          <p className="mt-1 text-sm opacity-90">최대 40% · 오늘출발 아이템 모음</p>
+        </div>
+      </section>
+
+      <section className="max-w-6xl mx-auto px-4 mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {products.map((p) => (
+          <article key={p.id} className="rounded-2xl overflow-hidden bg-white border border-slate-200">
+            <Link href={`/florida/product/${p.id}`}>
+              <div className={`h-40 bg-gradient-to-br ${p.color}`} />
+            </Link>
+            <div className="p-3">
+              <p className="text-[11px] text-blue-600 font-semibold">{p.category}</p>
+              <Link href={`/florida/product/${p.id}`} className="block mt-1 font-semibold leading-snug line-clamp-2">{p.name}</Link>
+              <div className="mt-1 flex items-center gap-1">
+                {p.discountRate && <span className="text-rose-500 text-sm font-bold">{p.discountRate}%</span>}
+                <b className="text-lg">{p.price.toLocaleString("ko-KR")}원</b>
+              </div>
+              {p.originalPrice && <p className="text-xs line-through text-slate-400">{p.originalPrice.toLocaleString("ko-KR")}원</p>}
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-xs text-slate-500">{p.badge || "기획전"}</span>
+                <button onClick={() => toggleWish(p.id)} className="text-lg">
+                  {wish[p.id] ? "❤️" : "🤍"}
+                </button>
+              </div>
             </div>
           </article>
         ))}
       </section>
 
-      <section className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-        <h2 className="text-xl font-bold">주문/결제</h2>
-        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_180px]">
-          <input
-            value={buyerName}
-            onChange={(e) => setBuyerName(e.target.value)}
-            className="rounded-lg border px-3 py-2"
-            placeholder="주문자 이름"
-          />
-          <select
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value as typeof paymentMethod)}
-            className="rounded-lg border px-3 py-2"
-          >
-            <option value="kakaopay">카카오페이</option>
-            <option value="naverpay">네이버페이</option>
-            <option value="tosspay">토스페이</option>
-            <option value="card">카드</option>
-          </select>
+      <nav className="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200">
+        <div className="max-w-6xl mx-auto px-4 py-2 grid grid-cols-4 text-center text-xs">
+          <Link href="/florida" className="py-2 font-semibold">홈</Link>
+          <Link href="/florida" className="py-2">카테고리</Link>
+          <Link href="/login" className="py-2">마이</Link>
+          <Link href="/florida" className="py-2">찜</Link>
         </div>
-
-        <div className="mt-4 text-sm text-slate-600">선택 상품 {items.length}개 · 총액 <b>{total.toLocaleString("ko-KR")}원</b></div>
-
-        <button
-          onClick={checkout}
-          disabled={busy}
-          className="mt-4 w-full rounded-xl bg-blue-600 text-white py-3 font-semibold disabled:opacity-60"
-        >
-          {busy ? "결제 준비중..." : `${METHOD_LABEL[paymentMethod]}로 결제하기`}
-        </button>
-
-        {notice && <p className="mt-3 text-sm text-rose-600">{notice}</p>}
-      </section>
+      </nav>
     </main>
   );
 }
