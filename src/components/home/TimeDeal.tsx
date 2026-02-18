@@ -33,18 +33,20 @@ export default function TimeDeal({ onAction }: TimeDealProps) {
   const remainText = useMemo(() => getRemainText(remainSec), [remainSec]);
 
   return (
-    <section className="px-3 py-3 border-b bg-[#fff7f2]">
-      <div className="flex items-center justify-between">
-        <p className="font-bold text-sm text-[#E55A2B]">⏰ 타임딜</p>
-        <p className="text-xs text-slate-500">오늘 종료까지 {remainText}</p>
+    <section className="px-3 py-3 border-b border-slate-100 bg-white">
+      <div className="rounded-2xl border border-[#ffe1d6] bg-gradient-to-r from-[#fff7f2] to-[#fff9f4] p-3">
+        <div className="flex items-center justify-between">
+          <p className="font-bold text-sm text-[#E55A2B]">⏰ 타임딜</p>
+          <p className="text-xs text-slate-500">오늘 종료까지 {remainText}</p>
+        </div>
+        <p className="mt-1 text-sm font-medium">인기 카고팬츠 · 볼캡 · 숄더백 추가 10% 쿠폰</p>
+        <button
+          onClick={onAction}
+          className="mt-2 text-xs font-semibold rounded-full border border-[#ffd2c2] bg-white px-3 py-1 text-[#E55A2B]"
+        >
+          타임딜 상품만 보기
+        </button>
       </div>
-      <p className="mt-1 text-sm">인기 카고팬츠 · 볼캡 · 숄더백 추가 10% 쿠폰</p>
-      <button
-        onClick={onAction}
-        className="mt-2 text-xs font-semibold rounded-full border border-[#ffd2c2] bg-white px-3 py-1 text-[#E55A2B]"
-      >
-        타임딜 상품만 보기
-      </button>
     </section>
   );
 }

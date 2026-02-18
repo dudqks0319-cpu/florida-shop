@@ -72,8 +72,8 @@ export default function FloridaPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f5f6f8]">
-      <div className="max-w-md mx-auto bg-white min-h-screen pb-24">
+    <main className="min-h-screen bg-[#eef1f4]">
+      <div className="max-w-md mx-auto bg-[#f8fafc] min-h-screen pb-24 shadow-[0_0_0_1px_rgba(0,0,0,0.02)]">
         <div className="bg-[#ff4d67] text-white px-3 py-2 flex items-center justify-between text-sm">
           <span className="font-semibold">앱에서 더 많은 상품과 쿠폰을 볼 수 있어요!</span>
           <Link href="/florida/welcome" className="bg-white text-[#111] rounded-full px-3 py-1 text-xs font-semibold">
@@ -86,58 +86,64 @@ export default function FloridaPage() {
         <CategoryBar selected={category} onSelect={setCategory} />
         <TimeDeal onAction={applyTimeDealFilter} />
 
-        <section className="px-3 py-3 border-b bg-white">
-          <div className="grid grid-cols-[1fr_120px] gap-2">
-            <input
-              value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="상품명/설명 검색"
-              className="rounded-xl border px-3 py-2 text-sm"
-            />
-            <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="rounded-xl border px-2 py-2 text-sm">
-              <option value="recommend">추천순</option>
-              <option value="price_low">낮은가격순</option>
-              <option value="price_high">높은가격순</option>
-              <option value="review">리뷰많은순</option>
-            </select>
-          </div>
+        <section className="px-3 py-3 border-b border-slate-100 bg-white">
+          <div className="rounded-2xl border border-slate-200 p-2 bg-slate-50">
+            <div className="grid grid-cols-[1fr_110px] gap-2">
+              <input
+                value={searchKeyword}
+                onChange={(e) => setSearchKeyword(e.target.value)}
+                placeholder="상품명/설명 검색"
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              />
+              <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="rounded-xl border border-slate-200 bg-white px-2 py-2 text-sm">
+                <option value="recommend">추천순</option>
+                <option value="price_low">낮은가격순</option>
+                <option value="price_high">높은가격순</option>
+                <option value="review">리뷰많은순</option>
+              </select>
+            </div>
 
-          <div className="mt-2 flex flex-wrap gap-2">
-            {["전체", "구제", "영캐주얼", "잡화", "모자"].map((c) => (
-              <button
-                key={c}
-                onClick={() => setCategory(c as FloridaCategory)}
-                className={`rounded-full border px-3 py-1 text-xs ${category === c ? "border-[#FF6B35] text-[#FF6B35] bg-[#fff6f3]" : "border-slate-200 text-slate-600"}`}
-              >
-                {c}
-              </button>
-            ))}
+            <div className="mt-2 flex flex-wrap gap-2">
+              {["전체", "구제", "영캐주얼", "잡화", "모자"].map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setCategory(c as FloridaCategory)}
+                  className={`rounded-full border px-3 py-1 text-xs ${
+                    category === c ? "border-[#ffd4c4] text-[#FF6B35] bg-[#fff6f3]" : "border-slate-200 bg-white text-slate-600"
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
           </div>
         </section>
 
-        <section className="px-3 py-4 border-b bg-white">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-extrabold">오늘의 추천 TOP 3</h3>
-            <Link href="/florida/all" className="text-xs text-slate-500">전체보기</Link>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {topPicks.map((p) => (
-              <Link key={p.id} href={`/florida/product/${p.id}`} onClick={() => pushRecent(p.id)} className="rounded-lg border p-2 bg-slate-50">
-                <p className="text-[11px] font-semibold line-clamp-2 min-h-[30px]">{p.name}</p>
-                <p className="text-[11px] text-slate-500 mt-1">{p.price.toLocaleString("ko-KR")}원</p>
-              </Link>
-            ))}
+        <section className="px-3 py-4 border-b border-slate-100 bg-white">
+          <div className="rounded-2xl border border-slate-200 p-3 bg-slate-50">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-extrabold">오늘의 추천 TOP 3</h3>
+              <Link href="/florida/all" className="text-xs text-slate-500">전체보기</Link>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {topPicks.map((p) => (
+                <Link key={p.id} href={`/florida/product/${p.id}`} onClick={() => pushRecent(p.id)} className="rounded-lg border border-slate-200 p-2 bg-white">
+                  <p className="text-[11px] font-semibold line-clamp-2 min-h-[30px]">{p.name}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">{p.price.toLocaleString("ko-KR")}원</p>
+                </Link>
+              ))}
+            </div>
           </div>
         </section>
 
         <section className="px-3 py-4">
           <div className="flex items-end justify-between">
             <h3 className="text-2xl font-black tracking-tight">실시간 상품 목록</h3>
-            <span className="text-slate-300 text-sm">{filteredProducts.length}개</span>
+            <span className="text-slate-400 text-sm">{filteredProducts.length}개</span>
           </div>
 
           {filteredProducts.length === 0 ? (
-            <div className="mt-3 rounded-xl border bg-slate-50 p-6 text-center text-sm text-slate-500">
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
               조건에 맞는 상품이 없습니다. 카테고리/검색어를 바꿔보세요.
             </div>
           ) : (

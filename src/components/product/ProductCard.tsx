@@ -46,53 +46,61 @@ export default function ProductCard({
   const discountRate = originalPrice ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
 
   return (
-    <article className="rounded-xl border bg-white overflow-hidden">
+    <article className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow">
       <div className="relative">
         <Link href={`/florida/product/${id}`} onClick={onOpen}>
           {image ? (
-            <Image src={image} alt={name} width={320} height={320} className="w-full h-44 object-cover" />
+            <Image src={image} alt={name} width={320} height={320} className="w-full h-36 object-cover" />
           ) : (
-            <div className={`w-full h-44 bg-gradient-to-br ${colorClass || "from-slate-100 to-slate-300"}`} />
+            <div className={`w-full h-36 bg-gradient-to-br ${colorClass || "from-slate-100 to-slate-300"}`} />
           )}
         </Link>
 
-        {isNew && <span className="absolute top-2 left-2 text-[10px] font-bold bg-black text-white rounded-full px-2 py-1">NEW</span>}
-        {discountRate > 0 && <span className="absolute top-2 left-12 text-[10px] font-bold bg-rose-500 text-white rounded-full px-2 py-1">{discountRate}%</span>}
+        <div className="absolute top-2 left-2 flex items-center gap-1">
+          {isNew && <span className="text-[10px] font-bold bg-black text-white rounded-full px-2 py-1">NEW</span>}
+          {discountRate > 0 && <span className="text-[10px] font-bold bg-rose-500 text-white rounded-full px-2 py-1">{discountRate}%</span>}
+        </div>
 
         <button
           onClick={() => {
             if (onToggleWish) onToggleWish();
             else setLocalWish(!isWished);
           }}
-          className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-white/80 backdrop-blur-sm shadow-sm transition-all hover:scale-110"
+          className="absolute top-2 right-2 z-10 h-7 w-7 rounded-full bg-white/90 backdrop-blur-sm shadow-sm text-sm"
           aria-label="찜하기"
         >
-          <span className={`text-sm ${isWished ? "text-rose-500" : "text-slate-600"}`}>{isWished ? "♥" : "♡"}</span>
+          <span className={`${isWished ? "text-rose-500" : "text-slate-600"}`}>{isWished ? "♥" : "♡"}</span>
         </button>
       </div>
 
       <div className="p-2.5">
         {shopName && <p className="text-[11px] text-slate-400">{shopName}</p>}
-        <Link href={`/florida/product/${id}`} onClick={onOpen} className="text-sm font-semibold line-clamp-2 mt-0.5 block">
+        <Link href={`/florida/product/${id}`} onClick={onOpen} className="text-sm font-semibold line-clamp-2 mt-0.5 block min-h-[36px]">
           {name}
         </Link>
 
         <div className="mt-1.5 flex items-end gap-1">
           {discountRate > 0 && <span className="text-rose-500 font-bold text-sm">{discountRate}%</span>}
-          <span className="text-lg font-extrabold leading-none">{price.toLocaleString("ko-KR")}원</span>
+          <span className="text-[24px] font-extrabold leading-none">{price.toLocaleString("ko-KR")}원</span>
           {originalPrice && originalPrice > price && (
             <span className="text-xs text-slate-400 line-through">{originalPrice.toLocaleString("ko-KR")}원</span>
           )}
         </div>
 
-        <div className="mt-1 flex items-center justify-between">
+        <div className="mt-1.5 flex items-center justify-between">
           <p className="text-[11px] text-slate-500 flex items-center gap-1">
             <span className="text-amber-500">★</span>
             {rating.toFixed(1)} ({reviewCount})
           </p>
-          <button onClick={() => (hasOptions ? setOpenOption(true) : onAddCart?.())} className="text-xs border rounded px-2 py-0.5">담기</button>
+          <button
+            onClick={() => (hasOptions ? setOpenOption(true) : onAddCart?.())}
+            className="text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white"
+          >
+            담기
+          </button>
         </div>
       </div>
+
       <OptionBottomSheet
         isOpen={openOption}
         onClose={() => setOpenOption(false)}

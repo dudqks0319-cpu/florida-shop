@@ -8,27 +8,31 @@ const BENEFITS = [
 
 export default function FloridaWelcomePage() {
   return (
-    <main className="min-h-screen bg-[#f5f6f8]">
-      <div className="max-w-md mx-auto bg-white min-h-screen px-6 py-10">
-        <p className="text-xs font-semibold text-[#FF6B35]">FLORIDA WELCOME</p>
-        <h1 className="text-4xl font-black tracking-tight mt-2">플로리다에서
-          <br />패션 쇼핑을 시작해보세요.
-        </h1>
-        <p className="mt-3 text-sm text-slate-600">지금 가입하면 무료배송 + 신규 쿠폰 혜택을 받을 수 있어요.</p>
+    <main className="min-h-screen bg-[#eef1f4]">
+      <div className="max-w-md mx-auto bg-[#f8fafc] min-h-screen px-4 py-6 pb-24">
+        <section className="rounded-3xl bg-gradient-to-r from-[#FF6B35] to-[#00BFA6] p-5 text-white shadow-sm">
+          <p className="text-xs font-semibold opacity-90">FLORIDA WELCOME</p>
+          <h1 className="text-3xl font-black tracking-tight mt-2">지금 시작하면
+            <br />혜택이 바로 적용돼요.
+          </h1>
+          <p className="text-sm mt-2 opacity-95">무료배송 + 신규쿠폰 + 오늘출발 상품까지 한 번에.</p>
+        </section>
 
-        <section className="mt-6 space-y-2">
+        <section className="mt-4 space-y-2">
           {BENEFITS.map((b) => (
-            <article key={b.title} className="rounded-xl border bg-slate-50 p-3">
+            <article key={b.title} className="rounded-2xl border border-slate-200 bg-white p-3">
               <p className="font-semibold text-sm">{b.title}</p>
               <p className="text-xs text-slate-500 mt-1">{b.desc}</p>
             </article>
           ))}
         </section>
 
-        <div className="mt-8 grid gap-2">
-          <Link href="/login" className="w-full rounded-xl bg-[#FEE500] py-3 text-center font-bold">카카오로 3초 만에 시작하기</Link>
-          <Link href="/login" className="w-full rounded-xl border py-3 text-center font-semibold">이메일/소셜로 로그인</Link>
-          <Link href="/florida" className="w-full rounded-xl border py-3 text-center text-slate-600">먼저 둘러보기</Link>
+        <div className="fixed inset-x-0 bottom-0 border-t border-slate-200 bg-white/95 backdrop-blur p-3">
+          <div className="max-w-md mx-auto grid gap-2">
+            <Link href="/login" className="w-full rounded-xl bg-[#FEE500] py-3 text-center font-bold text-[#191919]">카카오로 3초 만에 시작하기</Link>
+            <Link href="/login" className="w-full rounded-xl border border-slate-300 py-3 text-center font-semibold">이메일/소셜로 로그인</Link>
+            <Link href="/florida" className="w-full rounded-xl border border-slate-200 py-3 text-center text-slate-600">먼저 둘러보기</Link>
+          </div>
         </div>
       </div>
     </main>

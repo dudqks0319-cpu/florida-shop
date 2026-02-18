@@ -24,18 +24,20 @@ type CategoryBarProps = {
 
 export default function CategoryBar({ selected = "전체", onSelect }: CategoryBarProps) {
   return (
-    <section className="px-3 py-4 border-b bg-white">
-      <div className="grid grid-cols-6 gap-y-4 text-center">
+    <section className="px-3 py-3 border-b border-slate-100 bg-white">
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
         {QUICK_MENUS.map((m, idx) => {
           const active = selected === m.key || (selected !== "전체" && m.key === selected && idx > 0);
           return (
             <button
               key={`${m.label}-${idx}`}
-              className="flex flex-col items-center gap-1"
+              className={`shrink-0 inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                active ? "border-[#ffd4c4] bg-[#fff5f1] text-[#FF6B35]" : "border-slate-200 bg-white text-slate-600"
+              }`}
               onClick={() => onSelect?.(m.key)}
             >
-              <span className={`text-lg transition-transform ${active ? "scale-110" : "opacity-90"}`}>{m.icon}</span>
-              <span className={`text-[11px] ${active ? "text-[#FF6B35] font-semibold" : "text-slate-700"}`}>{m.label}</span>
+              <span>{m.icon}</span>
+              <span>{m.label}</span>
             </button>
           );
         })}

@@ -70,85 +70,85 @@ export default function FloridaAllPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#f5f6f8]">
-      <div className="max-w-md mx-auto min-h-screen bg-white pb-16">
+    <main className="min-h-screen bg-[#eef1f4]">
+      <div className="max-w-md mx-auto min-h-screen bg-[#f8fafc] pb-20">
         <div className="bg-[#ff4d67] text-white px-3 py-2 flex items-center justify-between text-sm">
           <span className="font-semibold">앱에서 더 많은 상품을 볼 수 있어요!</span>
           <Link href="/florida/welcome" className="bg-white text-[#111] rounded-full px-3 py-1 text-xs font-semibold">혜택 보기</Link>
         </div>
 
-        <header className="px-4 py-4 border-b sticky top-0 bg-white z-20">
+        <header className="px-4 py-4 border-b border-slate-100 sticky top-0 bg-white/95 z-20 backdrop-blur">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-black">전체보기</h1>
             <div className="flex items-center gap-2 text-xs">
-              <Link href="/florida/cart" className="px-2 py-1 rounded border">장바구니 {cartCount}</Link>
+              <Link href="/florida/cart" className="px-2 py-1 rounded-full border border-slate-200 bg-slate-50">장바구니 {cartCount}</Link>
               <Link href="/florida" className="text-slate-500">닫기 ✕</Link>
             </div>
           </div>
 
           <div className="mt-3 grid grid-cols-[1fr_110px] gap-2">
             <input
-              className="border rounded-lg px-3 py-2 text-sm"
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm bg-slate-50"
               placeholder="상품 검색"
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
             />
-            <select className="border rounded-lg px-2 py-2 text-sm" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+            <select className="border border-slate-200 rounded-xl px-2 py-2 text-sm bg-white" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
               <option value="recommend">추천순</option>
               <option value="price_low">낮은가격순</option>
               <option value="price_high">높은가격순</option>
               <option value="review">리뷰많은순</option>
             </select>
           </div>
-        </header>
 
-        <section className="grid grid-cols-[96px_1fr] min-h-[calc(100vh-140px)]">
-          <aside className="border-r bg-[#f8f9fb]">
+          <div className="mt-2 flex gap-2 overflow-x-auto scrollbar-hide pb-1">
             {CATEGORY_LIST.map((item) => (
               <button
                 key={item}
                 onClick={() => setCategory(item)}
-                className={`w-full px-3 py-3 text-sm border-b text-left ${category === item ? "bg-white font-semibold text-[#FF6B35]" : "text-slate-600"}`}
+                className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                  category === item ? "border-[#ffd4c4] bg-[#fff5f1] text-[#FF6B35]" : "border-slate-200 bg-white text-slate-600"
+                }`}
               >
                 {item}
               </button>
             ))}
-          </aside>
-
-          <div className="p-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-black">{category}</h2>
-              <p className="text-xs text-slate-400">{filtered.length}개</p>
-            </div>
-
-            {filtered.length === 0 ? (
-              <div className="mt-6 rounded-lg border bg-slate-50 p-4 text-sm text-slate-500 text-center">
-                검색 결과가 없습니다.
-              </div>
-            ) : (
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {filtered.map((p) => (
-                  <ProductCard
-                    key={p.id}
-                    id={p.id}
-                    name={p.name}
-                    price={p.price}
-                    originalPrice={p.originalPrice}
-                    image={imageOverrides[p.id] || p.image}
-                    rating={getRating(p)}
-                    reviewCount={p.reviews.length || 1}
-                    shopName={p.badge || "플로리다 스타일"}
-                    isNew={p.badge === "오늘출발" || p.badge === "재입고"}
-                    colorClass={p.color}
-                    wished={Boolean(wish[p.id])}
-                    onToggleWish={() => toggleWish(p.id)}
-                    onOpen={() => pushRecent(p.id)}
-                    onAddCart={() => addCart(p.id)}
-                  />
-                ))}
-              </div>
-            )}
           </div>
+        </header>
+
+        <section className="p-3">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-black">{category} 상품</h2>
+            <p className="text-xs text-slate-400">{filtered.length}개</p>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500 text-center">
+              검색 결과가 없습니다.
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {filtered.map((p) => (
+                <ProductCard
+                  key={p.id}
+                  id={p.id}
+                  name={p.name}
+                  price={p.price}
+                  originalPrice={p.originalPrice}
+                  image={imageOverrides[p.id] || p.image}
+                  rating={getRating(p)}
+                  reviewCount={p.reviews.length || 1}
+                  shopName={p.badge || "플로리다 스타일"}
+                  isNew={p.badge === "오늘출발" || p.badge === "재입고"}
+                  colorClass={p.color}
+                  wished={Boolean(wish[p.id])}
+                  onToggleWish={() => toggleWish(p.id)}
+                  onOpen={() => pushRecent(p.id)}
+                  onAddCart={() => addCart(p.id)}
+                />
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </main>
