@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
         "문자가 오지 않으면 1) 스팸함 확인 2) 60초 후 재발급 3) 계속 실패 시 고객센터 문의하기",
       ...(useVisibleCode ? { demoCode: code } : {}),
       expiresAt,
+      retryAfterSec: 60,
     });
   } catch (error) {
     return NextResponse.json(

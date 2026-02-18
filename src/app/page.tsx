@@ -397,6 +397,66 @@ export default function Home() {
     return "진행 중인 액션은 없습니다. 새 의뢰를 등록하거나 모집중 건을 확인해보세요.";
   }, [currentUser, errands, isNeighborhoodVerified, openDisputeCount]);
 
+  const notificationItems = useMemo(() => {
+    if (!currentUser) return [] as Array<{ id: string; level: "urgent" | "normal"; text: string; href: string }>;
+
+    const items: Array<{ id: string; level: "urgent" | "normal"; text: string; href: string }> = [];
+    const myRequesterErrands = errands.filter((e) => isRequesterOwnerForUser(e, currentUser));
+    const myHelperErrands = errands.filter((e) => isAssignedHelperForUser(e, currentUser));
+
+    for (const e of myRequesterErrands) {
+      if (e.status === "open" && e.payment.status === "pending") {
+        items.push({
+          id: `${e.id}-pay-pending`,
+          level: "urgent",
+          text: `결제 대기: “${e.title}” 건을 결제해야 매칭이 시작됩니다.`,
+          href: "#list-section",
+        });
+      }
+      if (e.status === "in_progress" && Boolean(e.proof)) {
+        items.push({
+          id: `${e.id}-approval-waiting`,
+          level: "urgent",
+          text: `승인 대기: “${e.title}” 완료 증빙이 올라왔습니다. 검토 후 승인해주세요.`,
+          href: "#list-section",
+        });
+      }
+    }
+
+    for (const e of myHelperErrands) {
+      if (e.status === "in_progress" && !e.proof) {
+        items.push({
+          id: `${e.id}-proof-needed`,
+          level: "normal",
+          text: `증빙 필요: “${e.title}” 건은 증빙을 올려야 정산 단계로 넘어갑니다.`,
+          href: "#list-section",
+        });
+      }
+      if (e.status === "open" && e.payment.status === "paid" && !e.helper) {
+        items.push({
+          id: `${e.id}-matchable`,
+          level: "normal",
+          text: `신규 매칭 가능: “${e.title}” 건이 결제 완료되어 바로 수락할 수 있습니다.`,
+          href: "#list-section",
+        });
+      }
+    }
+
+    if (currentUser.role === "admin") {
+      const pendingDisputes = errands.filter((e) => e.dispute?.status === "open");
+      if (pendingDisputes.length > 0) {
+        items.push({
+          id: "admin-dispute-open",
+          level: "urgent",
+          text: `분쟁 처리 대기 ${pendingDisputes.length}건: 관리자 분쟁 처리 보드에서 우선 대응해주세요.`,
+          href: "/admin/disputes",
+        });
+      }
+    }
+
+    return items.slice(0, 6);
+  }, [currentUser, errands]);
+
   const isRequesterOwner = (e: Errand) => isRequesterOwnerForUser(e, currentUser);
 
   const isAssignedHelper = (e: Errand) => isAssignedHelperForUser(e, currentUser);
@@ -599,7 +659,14 @@ export default function Home() {
       setBusy(false);
       return;
     }
-    setNotice({ type: "ok", text: `${paymentMethodLabel[e.payment.method]} 결제 준비 완료` });
+    if (json.checkoutUrl) {
+      window.open(String(json.checkoutUrl), "_blank", "noopener,noreferrer");
+    }
+
+    setNotice({
+      type: "ok",
+      text: `${paymentMethodLabel[e.payment.method]} 결제 준비 완료${json.checkoutUrl ? " · 새 탭에서 결제창을 열었습니다." : ""}`,
+    });
     await refresh();
     setBusy(false);
   };
@@ -867,7 +934,7 @@ export default function Home() {
     setVerifyRequestId(json.requestId);
     const expiresAt = String(json.expiresAt || "");
     setVerifyRemainSec(expiresAt ? Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)) : 0);
-    setResendCooldownSec(60);
+    setResendCooldownSec(Number.isFinite(Number(json.retryAfterSec)) ? Math.max(0, Number(json.retryAfterSec)) : 60);
     setVerificationGuide(String(json.guide || ""));
     setDemoCode(json.demoCode || "");
     setNotice({
@@ -963,6 +1030,36 @@ export default function Home() {
         >
           {notice.text}
         </div>
+      )}
+
+      {currentUser && (
+        <section className="card mt-5">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="section-title">알림 센터</h3>
+            <span className="text-xs text-slate-500">핵심 진행 알림만 최대 6건 표시</span>
+          </div>
+
+          {notificationItems.length === 0 ? (
+            <p className="text-sm text-slate-500 mt-3">현재 확인할 알림이 없습니다.</p>
+          ) : (
+            <div className="mt-3 grid gap-2">
+              {notificationItems.map((item) => (
+                <a
+                  key={item.id}
+                  href={item.href}
+                  className={`rounded-xl border px-3 py-2.5 text-sm transition-colors ${
+                    item.level === "urgent"
+                      ? "border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100"
+                      : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  {item.level === "urgent" ? "[긴급] " : "[안내] "}
+                  {item.text}
+                </a>
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
       <section className="card quick-action-card mt-5">
