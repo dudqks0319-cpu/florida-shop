@@ -895,7 +895,10 @@ export default function Home() {
             <p className="text-xs font-semibold text-slate-500">지금 할 일</p>
             <p className="text-sm text-slate-700 mt-1 leading-relaxed">{nextActionMessage}</p>
             {currentUser?.role === "admin" && (
-              <a href="/admin" className="hero-admin-link">운영 대시보드 바로가기 →</a>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <a href="/admin" className="hero-admin-link">운영 대시보드</a>
+                <a href="/admin/disputes" className="hero-admin-link">분쟁 처리 보드</a>
+              </div>
             )}
           </div>
         </div>
