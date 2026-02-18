@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { canTransition, mediumPenalty } from "@/lib/errand-rules";
-import { readDB, writeDB, type ErrandStatus } from "@/lib/store";
+import { calculateSettlement, canTransition, mediumPenalty } from "@/lib/errand-rules";
+import { makeId, readDB, writeDB, type AppUser, type Errand, type ErrandStatus } from "@/lib/store";
 
 type Params = { params: Promise<{ id: string }> };
+
+function isRequesterOwner(errand: Errand, user: AppUser) {
+  return errand.requesterId ? errand.requesterId === user.id : errand.requester === user.name;
+}
+
+function isAssignedHelper(errand: Errand, user: AppUser) {
+  return errand.helperId ? errand.helperId === user.id : Boolean(errand.helper && errand.helper === user.name);
+}
 
 export async function PATCH(req: NextRequest, { params }: Params) {
   const currentUser = await getCurrentUser(req);
@@ -25,27 +33,29 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   const isAdmin = currentUser.role === "admin";
-  const isRequester = currentUser.name === current.requester;
-  const isAssignedHelper = !!current.helper && currentUser.name === current.helper;
+  const isRequester = isRequesterOwner(current, currentUser);
+  const isHelper = isAssignedHelper(current, currentUser);
 
   if (nextStatus === "matched" && !(isAdmin || currentUser.role === "helper")) {
     return NextResponse.json({ error: "수행자 또는 관리자만 매칭할 수 있습니다." }, { status: 403 });
   }
-  if (nextStatus === "in_progress" && !(isAdmin || isAssignedHelper)) {
+  if (nextStatus === "in_progress" && !(isAdmin || isHelper)) {
     return NextResponse.json({ error: "담당 수행자 또는 관리자만 진행 시작할 수 있습니다." }, { status: 403 });
   }
-  if (nextStatus === "done" && !(isAdmin || isAssignedHelper)) {
+  if (nextStatus === "done" && !(isAdmin || isHelper)) {
     return NextResponse.json({ error: "담당 수행자 또는 관리자만 완료 처리할 수 있습니다." }, { status: 403 });
   }
-  if (nextStatus === "cancelled" && !(isAdmin || isRequester || isAssignedHelper)) {
+  if (nextStatus === "cancelled" && !(isAdmin || isRequester || isHelper)) {
     return NextResponse.json({ error: "의뢰자/담당 수행자/관리자만 취소할 수 있습니다." }, { status: 403 });
   }
 
-  const requestedHelper = typeof body?.helper === "string" ? body.helper.trim() : undefined;
+  const requestedHelperName = typeof body?.helper === "string" ? body.helper.trim() : "";
+  const requestedHelperId = typeof body?.helperId === "string" ? body.helperId.trim() : "";
 
-  const updated = {
+  const updated: Errand = {
     ...current,
     helper: current.helper,
+    helperId: current.helperId,
     status: nextStatus,
   };
 
@@ -54,15 +64,45 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "결제 완료 후에만 매칭할 수 있습니다." }, { status: 400 });
     }
 
-    const helperName = currentUser.role === "admin" ? requestedHelper : currentUser.name;
+    let helperUser: AppUser | undefined;
 
-    if (!helperName) {
-      return NextResponse.json({ error: "매칭 시 수행자 이름이 필요합니다." }, { status: 400 });
+    if (currentUser.role === "admin") {
+      if (requestedHelperId) {
+        helperUser = db.users.find((u) => u.id === requestedHelperId);
+      } else if (requestedHelperName) {
+        helperUser = db.users.find((u) => u.name === requestedHelperName);
+      }
+
+      if (!helperUser && requestedHelperName) {
+        helperUser = {
+          id: makeId(),
+          name: requestedHelperName,
+          role: "helper",
+          createdAt: new Date().toISOString(),
+        };
+        db.users.unshift(helperUser);
+      }
+    } else {
+      helperUser = currentUser;
     }
-    if (helperName === current.requester) {
+
+    if (!helperUser) {
+      return NextResponse.json({ error: "매칭 시 수행자 계정이 필요합니다." }, { status: 400 });
+    }
+    if (helperUser.role !== "helper" && helperUser.role !== "admin") {
+      return NextResponse.json({ error: "수행자 권한 계정만 매칭할 수 있습니다." }, { status: 403 });
+    }
+
+    const requesterSameUser = current.requesterId
+      ? current.requesterId === helperUser.id
+      : current.requester === helperUser.name;
+
+    if (requesterSameUser) {
       return NextResponse.json({ error: "의뢰자 본인은 수행자로 매칭할 수 없습니다." }, { status: 400 });
     }
-    updated.helper = helperName;
+
+    updated.helper = helperUser.name;
+    updated.helperId = helperUser.id;
   }
 
   if ((nextStatus === "in_progress" || nextStatus === "done") && !updated.helper) {
@@ -70,21 +110,50 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   if (nextStatus === "done") {
-    if (!body?.settlement) {
-      return NextResponse.json({ error: "완료 시 정산 정보가 필요합니다." }, { status: 400 });
+    const bodySettlement = body?.settlement;
+
+    if (bodySettlement) {
+      const platformFeeKrw = Number(bodySettlement?.platformFeeKrw);
+      const helperPayoutKrw = Number(bodySettlement?.helperPayoutKrw);
+
+      if (
+        !Number.isInteger(platformFeeKrw) ||
+        !Number.isInteger(helperPayoutKrw) ||
+        platformFeeKrw < 0 ||
+        helperPayoutKrw < 0
+      ) {
+        return NextResponse.json({ error: "정산 금액이 올바르지 않습니다." }, { status: 400 });
+      }
+      if (platformFeeKrw + helperPayoutKrw !== current.rewardKrw) {
+        return NextResponse.json({ error: "정산 합계가 의뢰 금액과 일치하지 않습니다." }, { status: 400 });
+      }
+
+      updated.settlement = {
+        platformFeeKrw,
+        helperPayoutKrw,
+        status: "paid",
+        settledAt: bodySettlement?.settledAt || new Date().toISOString(),
+      };
+    } else {
+      const settlement = calculateSettlement(current.rewardKrw);
+      updated.settlement = {
+        ...settlement,
+        status: "paid",
+        settledAt: new Date().toISOString(),
+      };
     }
 
-    const platformFeeKrw = Number(body?.settlement?.platformFeeKrw);
-    const helperPayoutKrw = Number(body?.settlement?.helperPayoutKrw);
-
-    if (!Number.isInteger(platformFeeKrw) || !Number.isInteger(helperPayoutKrw) || platformFeeKrw < 0 || helperPayoutKrw < 0) {
-      return NextResponse.json({ error: "정산 금액이 올바르지 않습니다." }, { status: 400 });
+    if (updated.dispute?.status === "open") {
+      updated.dispute = {
+        ...updated.dispute,
+        status: "resolved",
+        resolvedAt: new Date().toISOString(),
+        resolverId: currentUser.id,
+        resolverName: currentUser.name,
+        resolutionNote: "완료 처리와 함께 자동 종료",
+        resolutionStatus: "done",
+      };
     }
-    if (platformFeeKrw + helperPayoutKrw !== current.rewardKrw) {
-      return NextResponse.json({ error: "정산 합계가 의뢰 금액과 일치하지 않습니다." }, { status: 400 });
-    }
-
-    updated.settlement = body.settlement;
   }
 
   if (nextStatus === "cancelled" && current.status !== "cancelled") {
@@ -96,6 +165,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       reason: p.reason,
       decidedAt: new Date().toISOString(),
     };
+
+    if (updated.dispute?.status === "open") {
+      updated.dispute = {
+        ...updated.dispute,
+        status: "resolved",
+        resolvedAt: new Date().toISOString(),
+        resolverId: currentUser.id,
+        resolverName: currentUser.name,
+        resolutionNote: "취소 처리와 함께 자동 종료",
+        resolutionStatus: "cancelled",
+      };
+    }
   }
 
   db.errands[idx] = updated;

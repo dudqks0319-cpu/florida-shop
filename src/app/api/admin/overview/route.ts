@@ -24,6 +24,8 @@ export async function GET(req: NextRequest) {
   const totalFee = errands.reduce((sum, e) => sum + (e.settlement?.platformFeeKrw || 0), 0);
   const totalPayout = errands.reduce((sum, e) => sum + (e.settlement?.helperPayoutKrw || 0), 0);
   const penaltyTotal = errands.reduce((sum, e) => sum + (e.cancellation?.requesterPenaltyKrw || 0), 0);
+  const openDisputes = errands.filter((e) => e.dispute?.status === "open").length;
+  const reviewCount = errands.reduce((sum, e) => sum + (e.reviews?.length || 0), 0);
 
   const recent = errands.slice(0, 12);
 
@@ -40,6 +42,8 @@ export async function GET(req: NextRequest) {
       totalFee,
       totalPayout,
       penaltyTotal,
+      openDisputes,
+      reviewCount,
       uniqueRequesters: new Set(errands.map((e) => e.requester)).size,
       uniqueHelpers: new Set(errands.map((e) => e.helper).filter(Boolean)).size,
     },

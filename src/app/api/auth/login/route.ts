@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkLoginLock, clearLoginFailures, getClientIp, registerLoginFailure } from "@/lib/rate-limit";
 import { hashPassword, normalizeEmail } from "@/lib/auth-helpers";
-import { makeId, makeSessionToken, pruneExpiredSessions, readDB, writeDB, type UserRole } from "@/lib/store";
+import { makeSessionToken, pruneExpiredSessions, readDB, writeDB } from "@/lib/store";
 
 const SESSION_DAYS = 7;
 
@@ -17,55 +17,31 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const mode = String(body?.mode || "legacy").trim();
+    const mode = String(body?.mode || "email").trim();
+
+    if (mode !== "email") {
+      registerLoginFailure(ip);
+      return NextResponse.json(
+        { error: "레거시 이름 로그인은 종료되었습니다. 이메일/소셜 로그인만 지원합니다." },
+        { status: 400 },
+      );
+    }
+
+    const email = normalizeEmail(String(body?.email || ""));
+    const password = String(body?.password || "");
+
+    if (!email || !password) {
+      registerLoginFailure(ip);
+      return NextResponse.json({ error: "이메일과 비밀번호를 입력해주세요." }, { status: 400 });
+    }
 
     const db = await readDB();
     pruneExpiredSessions(db);
 
-    let user: (typeof db.users)[number] | undefined;
-
-    if (mode === "email") {
-      const email = normalizeEmail(String(body?.email || ""));
-      const password = String(body?.password || "");
-
-      if (!email || !password) {
-        registerLoginFailure(ip);
-        return NextResponse.json({ error: "이메일과 비밀번호를 입력해주세요." }, { status: 400 });
-      }
-
-      user = db.users.find((u) => (u.email || "").toLowerCase() === email && u.provider === "email");
-      if (!user || !user.passwordHash || user.passwordHash !== hashPassword(password)) {
-        registerLoginFailure(ip);
-        return NextResponse.json({ error: "이메일 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
-      }
-    } else {
-      const name = String(body?.name || "").trim();
-      const role = String(body?.role || "").trim() as UserRole;
-
-      if (!name || !role) {
-        registerLoginFailure(ip);
-        return NextResponse.json({ error: "이름과 역할이 필요합니다." }, { status: 400 });
-      }
-      if (!( ["requester", "helper", "admin"] as const).includes(role)) {
-        registerLoginFailure(ip);
-        return NextResponse.json({ error: "유효하지 않은 역할입니다." }, { status: 400 });
-      }
-
-      user = db.users.find((u) => u.name === name && u.role === role);
-      if (!user) {
-        user = {
-          id: makeId(),
-          name,
-          role,
-          createdAt: new Date().toISOString(),
-        };
-        db.users.unshift(user);
-      }
-    }
-
-    if (!user) {
+    const user = db.users.find((u) => (u.email || "").toLowerCase() === email && u.provider === "email");
+    if (!user || !user.passwordHash || user.passwordHash !== hashPassword(password)) {
       registerLoginFailure(ip);
-      return NextResponse.json({ error: "로그인 정보를 확인해주세요." }, { status: 400 });
+      return NextResponse.json({ error: "이메일 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
     }
 
     const token = makeSessionToken();

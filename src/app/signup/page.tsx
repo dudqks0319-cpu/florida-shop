@@ -53,6 +53,16 @@ export default function SignupPage() {
         <input className="border rounded-lg px-3 py-2" placeholder="아파트명" value={form.apartment} onChange={(e) => setForm((p) => ({ ...p, apartment: e.target.value }))} />
         <input className="border rounded-lg px-3 py-2" placeholder="동 (예: 화봉동)" value={form.dong} onChange={(e) => setForm((p) => ({ ...p, dong: e.target.value }))} />
 
+        <select
+          className="border rounded-lg px-3 py-2"
+          value={form.role}
+          onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))}
+        >
+          <option value="requester">의뢰자(심부름 요청)</option>
+          <option value="helper">수행자(심부름 수행)</option>
+        </select>
+        <p className="text-xs text-slate-500">관리자 계정은 운영자 승인으로만 생성됩니다.</p>
+
         <button onClick={signup} disabled={busy} className="bg-blue-600 text-white rounded-lg px-3 py-2 disabled:opacity-60">
           {busy ? "처리중..." : "회원가입"}
         </button>

@@ -33,9 +33,11 @@ type Errand = {
   category: "convenience" | "delivery" | "bank" | "admin" | "etc";
   rewardKrw: number;
   requester: string;
+  requesterId?: string;
   apartment: string;
   status: "open" | "matched" | "in_progress" | "done" | "cancelled";
   helper?: string;
+  helperId?: string;
   payment: {
     method: "kakaopay" | "naverpay" | "tosspay" | "card";
     status: "pending" | "ready" | "paid" | "failed";
@@ -58,6 +60,35 @@ type Errand = {
     helperCompensationKrw: number;
     decidedAt: string;
   };
+  proof?: {
+    note?: string;
+    imageUrl?: string;
+    uploadedAt: string;
+    helperId: string;
+    helperName: string;
+  };
+  dispute?: {
+    status: "open" | "resolved";
+    reason: string;
+    reporterId: string;
+    reporterName: string;
+    createdAt: string;
+    resolvedAt?: string;
+    resolverName?: string;
+    resolutionNote?: string;
+    resolutionStatus?: "done" | "cancelled";
+  };
+  reviews?: Array<{
+    id: string;
+    reviewerId: string;
+    reviewerName: string;
+    targetRole: "requester" | "helper";
+    rating: number;
+    comment?: string;
+    createdAt: string;
+  }>;
+  approvedAt?: string;
+  approvedByName?: string;
 };
 
 const categoryLabel: Record<string, string> = {
@@ -105,8 +136,6 @@ function formatKrw(n: number) {
 export default function Home() {
   const [errands, setErrands] = useState<Errand[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
-  const [loginName, setLoginName] = useState("");
-  const [loginRole, setLoginRole] = useState<"requester" | "helper" | "admin">("requester");
 
   const [form, setForm] = useState({
     title: "",
@@ -114,7 +143,6 @@ export default function Home() {
     category: "convenience",
     paymentMethod: "kakaopay",
     rewardKrw: 5000,
-    requester: "",
     apartment: "",
   });
   const [helperName, setHelperName] = useState("");
@@ -131,6 +159,8 @@ export default function Home() {
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | Errand["status"]>("all");
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [proofNotes, setProofNotes] = useState<Record<string, string>>({});
+  const [proofFiles, setProofFiles] = useState<Record<string, File | null>>({});
 
   const openCount = useMemo(() => errands.filter((e) => e.status === "open").length, [errands]);
   const totalPenalty = useMemo(() => errands.reduce((sum, e) => sum + (e.cancellation?.requesterPenaltyKrw ?? 0), 0), [errands]);
@@ -154,6 +184,23 @@ export default function Home() {
     });
   }, [errands, statusFilter, searchKeyword]);
 
+  const isRequesterOwner = (e: Errand) => {
+    if (!currentUser) return false;
+    return e.requesterId ? e.requesterId === currentUser.id : e.requester === currentUser.name;
+  };
+
+  const isAssignedHelper = (e: Errand) => {
+    if (!currentUser) return false;
+    return e.helperId ? e.helperId === currentUser.id : e.helper === currentUser.name;
+  };
+
+  const getPaymentFlowLabel = (e: Errand) => {
+    if (e.payment.status === "paid") return "1) 결제완료 → 2) 매칭 → 3) 진행/증빙 → 4) 승인/정산";
+    if (e.payment.status === "ready") return "1) 결제창 준비됨 → 결제 확정 필요";
+    if (e.payment.status === "failed") return "결제 실패 (사유 확인 후 재시도)";
+    return "결제 준비 전";
+  };
+
   const refresh = async () => {
     try {
       const res = await fetch("/api/errands");
@@ -176,7 +223,6 @@ export default function Home() {
       if (json.user?.name) {
         setForm((prev) => ({
           ...prev,
-          requester: json.user.name,
           apartment: json.user.apartment || prev.apartment,
         }));
       }
@@ -191,28 +237,7 @@ export default function Home() {
     fetchMe();
   }, []);
 
-  const login = async () => {
-    if (!loginName.trim()) {
-      setNotice({ type: "error", text: "로그인 이름을 입력해주세요." });
-      return;
-    }
-    setBusy(true);
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: loginName.trim(), role: loginRole }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setNotice({ type: "error", text: json.error || "로그인 실패" });
-      setBusy(false);
-      return;
-    }
-    setCurrentUser(json.user);
-    setForm((prev) => ({ ...prev, requester: json.user.name }));
-    setNotice({ type: "ok", text: `${json.user.name}(${json.user.role}) 로그인 완료` });
-    setBusy(false);
-  };
+  // 레거시 이름 로그인은 보안상 제거되었습니다.
 
   const logout = async () => {
     setBusy(true);
@@ -232,8 +257,8 @@ export default function Home() {
       setNotice({ type: "error", text: "로그인 후 의뢰 등록이 가능합니다." });
       return;
     }
-    if (!form.title || !form.requester || !form.apartment) {
-      setNotice({ type: "error", text: "제목/의뢰자/아파트를 모두 입력해주세요." });
+    if (!form.title || !form.apartment) {
+      setNotice({ type: "error", text: "제목/아파트를 모두 입력해주세요." });
       return;
     }
     if (!verifiedRequestId) {
@@ -278,20 +303,7 @@ export default function Home() {
     setBusy(false);
   };
 
-  const completeAndSettle = async (e: Errand) => {
-    const platformFeeKrw = Math.round(e.rewardKrw * 0.1);
-    const helperPayoutKrw = e.rewardKrw - platformFeeKrw;
-
-    await updateErrand(e.id, {
-      status: "done",
-      settlement: {
-        platformFeeKrw,
-        helperPayoutKrw,
-        status: "paid",
-        settledAt: new Date().toISOString(),
-      },
-    });
-  };
+  // 완료/정산은 "증빙 업로드 → 의뢰자 승인" 흐름으로 처리합니다.
 
   const readyPayment = async (e: Errand) => {
     setBusy(true);
@@ -309,10 +321,15 @@ export default function Home() {
 
   const confirmPayment = async (e: Errand) => {
     setBusy(true);
+    const paymentKey = window.prompt(
+      "live 모드라면 결제 승인 후 받은 paymentKey를 입력해주세요.\n(mock 모드면 비워둬도 됩니다.)",
+      "",
+    );
+
     const res = await fetch(`/api/payments/${e.id}/confirm`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ paymentKey: paymentKey || undefined }),
     });
     const json = await res.json();
     if (!res.ok) {
@@ -320,7 +337,125 @@ export default function Home() {
       setBusy(false);
       return;
     }
-    setNotice({ type: "ok", text: "결제 완료 처리되었습니다." });
+    setNotice({ type: "ok", text: json.message || "결제 완료 처리되었습니다." });
+    await refresh();
+    setBusy(false);
+  };
+
+  const uploadProof = async (e: Errand) => {
+    const note = (proofNotes[e.id] || "").trim();
+    const file = proofFiles[e.id];
+
+    if (!note && !file) {
+      setNotice({ type: "error", text: "증빙 메모 또는 이미지를 입력해주세요." });
+      return;
+    }
+
+    setBusy(true);
+
+    const formData = new FormData();
+    if (note) formData.set("note", note);
+    if (file) formData.set("file", file);
+
+    const res = await fetch(`/api/errands/${e.id}/proof`, {
+      method: "POST",
+      body: formData,
+    });
+    const json = await res.json();
+
+    if (!res.ok) {
+      setNotice({ type: "error", text: json.error || "증빙 업로드 실패" });
+      setBusy(false);
+      return;
+    }
+
+    setProofNotes((prev) => ({ ...prev, [e.id]: "" }));
+    setProofFiles((prev) => ({ ...prev, [e.id]: null }));
+    setNotice({ type: "ok", text: "완료 증빙이 업로드되었습니다." });
+    await refresh();
+    setBusy(false);
+  };
+
+  const approveCompletion = async (e: Errand) => {
+    setBusy(true);
+    const res = await fetch(`/api/errands/${e.id}/approve`, { method: "POST" });
+    const json = await res.json();
+    if (!res.ok) {
+      setNotice({ type: "error", text: json.error || "완료 승인 실패" });
+      setBusy(false);
+      return;
+    }
+    setNotice({ type: "ok", text: "완료 승인 및 정산이 처리되었습니다." });
+    await refresh();
+    setBusy(false);
+  };
+
+  const openDispute = async (e: Errand) => {
+    const reason = window.prompt("이의제기 사유를 입력해주세요. (최소 5자)", "");
+    if (!reason) return;
+
+    setBusy(true);
+    const res = await fetch(`/api/errands/${e.id}/dispute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setNotice({ type: "error", text: json.error || "이의제기 등록 실패" });
+      setBusy(false);
+      return;
+    }
+    setNotice({ type: "ok", text: "이의제기가 등록되었습니다." });
+    await refresh();
+    setBusy(false);
+  };
+
+  const resolveDispute = async (e: Errand, decision: "done" | "cancelled") => {
+    const note = window.prompt(`분쟁 ${decision === "done" ? "완료확정" : "취소확정"} 메모를 입력해주세요.`, "");
+
+    setBusy(true);
+    const res = await fetch(`/api/errands/${e.id}/dispute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resolve", decision, note }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setNotice({ type: "error", text: json.error || "분쟁 해결 실패" });
+      setBusy(false);
+      return;
+    }
+    setNotice({ type: "ok", text: "분쟁이 해결되었습니다." });
+    await refresh();
+    setBusy(false);
+  };
+
+  const submitReview = async (e: Errand) => {
+    const ratingRaw = window.prompt("평점을 입력해주세요. (1~5)", "5");
+    if (!ratingRaw) return;
+
+    const rating = Number(ratingRaw);
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      setNotice({ type: "error", text: "평점은 1~5점 정수여야 합니다." });
+      return;
+    }
+
+    const comment = window.prompt("리뷰 내용을 입력해주세요. (선택)", "") || "";
+
+    setBusy(true);
+    const res = await fetch(`/api/errands/${e.id}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rating, comment }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setNotice({ type: "error", text: json.error || "리뷰 등록 실패" });
+      setBusy(false);
+      return;
+    }
+    setNotice({ type: "ok", text: "리뷰가 등록되었습니다." });
     await refresh();
     setBusy(false);
   };
@@ -440,21 +575,9 @@ export default function Home() {
               이메일/소셜 로그인은 <Link href="/login" className="text-blue-600 underline">로그인 페이지</Link>,
               신규 가입은 <Link href="/signup" className="text-blue-600 underline">회원가입 페이지</Link>에서 진행하세요.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_110px] gap-2.5">
-              <input
-                placeholder="(레거시) 로그인 이름"
-                value={loginName}
-                onChange={(e) => setLoginName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && login()}
-                className="input-field"
-              />
-              <select value={loginRole} onChange={(e) => setLoginRole(e.target.value as CurrentUser["role"])} className="input-field">
-                <option value="requester">의뢰자</option>
-                <option value="helper">수행자</option>
-                <option value="admin">관리자</option>
-              </select>
-              <button disabled={busy} onClick={login} className="btn-primary">{busy ? "처리중..." : "로그인"}</button>
-            </div>
+            <p className="text-xs text-slate-500">
+              보안을 위해 이름만 입력하는 레거시 로그인은 종료되었습니다.
+            </p>
           </div>
         )}
       </section>
@@ -576,13 +699,6 @@ export default function Home() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
           <input placeholder="제목 (예: 편의점 다녀와주세요)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="input-field" maxLength={80} />
           <input
-            placeholder="의뢰자 이름"
-            value={form.requester}
-            readOnly={!!currentUser}
-            onChange={(e) => setForm({ ...form, requester: e.target.value })}
-            className={`input-field ${currentUser ? "bg-slate-50 text-slate-500" : ""}`}
-          />
-          <input
             placeholder="아파트/동"
             value={form.apartment}
             onChange={(e) => setForm({ ...form, apartment: e.target.value })}
@@ -602,7 +718,7 @@ export default function Home() {
             <option value="tosspay">토스페이</option>
             <option value="card">카드</option>
           </select>
-          <div className="relative">
+          <div className="relative sm:col-span-2">
             <input
               type="number"
               placeholder="건당 보상금"
@@ -615,6 +731,9 @@ export default function Home() {
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">원</span>
           </div>
         </div>
+        <p className="text-xs text-slate-500 mt-2">
+          의뢰자는 현재 로그인 계정(<b>{currentUser?.name || "로그인 필요"}</b>)으로 자동 등록됩니다.
+        </p>
         <textarea
           placeholder="상세 내용 (요청사항, 물품 등을 자세히 적어주세요)"
           value={form.detail}
@@ -659,17 +778,23 @@ export default function Home() {
         <h3 className="font-bold text-base">의뢰 목록</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
           <input
-            placeholder="수행자 이름 입력 (매칭할 때 사용)"
-            value={helperName}
-            onChange={(e) => setHelperName(e.target.value)}
-            className="input-field"
-          />
-          <input
             placeholder="제목/아파트/의뢰자 검색"
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
             className="input-field"
           />
+          {currentUser?.role === "admin" ? (
+            <input
+              placeholder="관리자 매칭용 수행자 이름"
+              value={helperName}
+              onChange={(e) => setHelperName(e.target.value)}
+              className="input-field"
+            />
+          ) : (
+            <div className="input-field bg-slate-50 text-slate-500 flex items-center">
+              수행자는 본인 계정으로만 매칭할 수 있습니다.
+            </div>
+          )}
         </div>
         <div className="flex gap-2 mt-3 flex-wrap">
           {(["all", "open", "matched", "in_progress", "done", "cancelled"] as const).map((s) => (
@@ -687,81 +812,190 @@ export default function Home() {
 
         <div className="grid gap-3 mt-4">
           {filteredErrands.length === 0 && <p className="text-slate-500 text-sm py-4 text-center">조건에 맞는 의뢰가 없습니다.</p>}
-          {filteredErrands.map((e) => (
-            <div key={e.id} className="border border-slate-200 rounded-xl p-3 sm:p-4 bg-white">
-              <div className="flex justify-between items-start gap-2">
-                <b className="text-sm sm:text-base leading-snug">{e.title}</b>
-                <span className={`shrink-0 text-xs px-2.5 py-0.5 rounded-full border font-medium ${statusColor[e.status]}`}>
-                  {statusLabel[e.status]}
-                </span>
-              </div>
-              <p className="text-slate-500 mt-1.5 text-sm">{e.detail || "상세 내용 없음"}</p>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-sm text-slate-600">
-                <span>{categoryLabel[e.category]}</span>
-                <span>{e.apartment}</span>
-                <span className="font-semibold text-slate-800">{formatKrw(e.rewardKrw)}</span>
-              </div>
-              <p className="text-slate-500 mt-1 text-xs">
-                의뢰자: {e.requester}{e.helper ? ` / 수행자: ${e.helper}` : ""}
-              </p>
-              <p className="text-slate-600 mt-1 text-xs">
-                결제: <b>{paymentMethodLabel[e.payment.method]}</b> · <b>{paymentStatusLabel[e.payment.status]}</b>
-              </p>
-              {e.payment.failedReason && (
-                <p className="text-red-700 mt-1 text-xs">결제오류: {e.payment.failedReason}</p>
-              )}
+          {filteredErrands.map((e) => {
+            const mineAsRequester = isRequesterOwner(e);
+            const mineAsHelper = isAssignedHelper(e);
+            const isAdminUser = currentUser?.role === "admin";
 
-              {e.settlement && (
-                <div className="mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600">
-                  정산: 수행자 <b>{formatKrw(e.settlement.helperPayoutKrw)}</b> / 수수료 <b>{formatKrw(e.settlement.platformFeeKrw)}</b>
+            const canPay = e.status === "open" && (mineAsRequester || isAdminUser);
+            const canMatch = e.status === "open" && e.payment.status === "paid" && (isAdminUser || currentUser?.role === "helper");
+            const canStart = e.status === "matched" && (mineAsHelper || isAdminUser);
+            const canUploadProof = e.status === "in_progress" && (mineAsHelper || isAdminUser);
+            const canApprove = e.status === "in_progress" && Boolean(e.proof) && (mineAsRequester || isAdminUser);
+            const canOpenDispute = e.status !== "cancelled" && (mineAsRequester || mineAsHelper || isAdminUser);
+            const canReview = e.status === "done" && (mineAsRequester || mineAsHelper || isAdminUser);
+
+            return (
+              <div key={e.id} className="border border-slate-200 rounded-xl p-3 sm:p-4 bg-white">
+                <div className="flex justify-between items-start gap-2">
+                  <b className="text-sm sm:text-base leading-snug">{e.title}</b>
+                  <span className={`shrink-0 text-xs px-2.5 py-0.5 rounded-full border font-medium ${statusColor[e.status]}`}>
+                    {statusLabel[e.status]}
+                  </span>
                 </div>
-              )}
 
-              {e.cancellation && (
-                <div className="mt-2 p-2.5 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
-                  취소: {e.cancellation.reason} · 패널티 <b>{formatKrw(e.cancellation.requesterPenaltyKrw)}</b>
-                  {e.cancellation.helperCompensationKrw > 0 ? ` (수행자 보상 ${formatKrw(e.cancellation.helperCompensationKrw)})` : ""}
+                <p className="text-slate-500 mt-1.5 text-sm">{e.detail || "상세 내용 없음"}</p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-sm text-slate-600">
+                  <span>{categoryLabel[e.category]}</span>
+                  <span>{e.apartment}</span>
+                  <span className="font-semibold text-slate-800">{formatKrw(e.rewardKrw)}</span>
                 </div>
-              )}
 
-              <div className="flex gap-2 mt-3 flex-wrap">
-                {e.status === "open" && e.payment.status === "pending" && (
-                  <button disabled={busy} onClick={() => readyPayment(e)} className="btn-secondary text-sm">결제 준비</button>
+                <p className="text-slate-500 mt-1 text-xs">
+                  의뢰자: {e.requester}
+                  {e.helper ? ` / 수행자: ${e.helper}` : " / 수행자: 미정"}
+                </p>
+                <p className="text-slate-600 mt-1 text-xs">
+                  결제: <b>{paymentMethodLabel[e.payment.method]}</b> · <b>{paymentStatusLabel[e.payment.status]}</b>
+                </p>
+                <p className="text-xs text-blue-700 mt-1">다음 단계: {getPaymentFlowLabel(e)}</p>
+
+                {e.payment.failedReason && (
+                  <p className="text-red-700 mt-1 text-xs">결제오류: {e.payment.failedReason}</p>
                 )}
-                {e.status === "open" && (e.payment.status === "ready" || e.payment.status === "pending") && (
-                  <button disabled={busy} onClick={() => confirmPayment(e)} className="btn-secondary text-sm">결제 완료 처리</button>
+
+                {e.proof && (
+                  <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-800">
+                    <p>
+                      완료 증빙: {e.proof.note || "메모 없음"} · 업로드 {new Date(e.proof.uploadedAt).toLocaleString("ko-KR")}
+                    </p>
+                    {e.proof.imageUrl && (
+                      <a href={e.proof.imageUrl} target="_blank" rel="noreferrer" className="underline text-emerald-700 text-xs">
+                        증빙 이미지 열기
+                      </a>
+                    )}
+                  </div>
                 )}
-                {e.status === "open" && (
-                  <button
-                    disabled={busy || e.payment.status !== "paid"}
-                    onClick={() => updateErrand(e.id, { status: "matched", helper: helperName || "근처도우미" })}
-                    className="btn-secondary text-sm disabled:opacity-50"
-                  >
-                    매칭
-                  </button>
+
+                {e.settlement && (
+                  <div className="mt-2 p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600">
+                    정산 완료: 수행자 <b>{formatKrw(e.settlement.helperPayoutKrw)}</b> / 수수료 <b>{formatKrw(e.settlement.platformFeeKrw)}</b>
+                    {e.approvedByName ? ` / 승인자 ${e.approvedByName}` : ""}
+                  </div>
                 )}
-                {e.status === "matched" && (
-                  <button disabled={busy} onClick={() => updateErrand(e.id, { status: "in_progress" })} className="btn-secondary text-sm">진행 시작</button>
+
+                {e.cancellation && (
+                  <div className="mt-2 p-2.5 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
+                    취소: {e.cancellation.reason} · 패널티 <b>{formatKrw(e.cancellation.requesterPenaltyKrw)}</b>
+                    {e.cancellation.helperCompensationKrw > 0
+                      ? ` (수행자 보상 ${formatKrw(e.cancellation.helperCompensationKrw)})`
+                      : ""}
+                  </div>
                 )}
-                {e.status === "in_progress" && (
-                  <button disabled={busy} onClick={() => completeAndSettle(e)} className="btn-secondary text-sm">완료 처리·정산</button>
+
+                {e.dispute && (
+                  <div className="mt-2 p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-800">
+                    <p>
+                      이의제기: {e.dispute.status === "open" ? "진행중" : "해결됨"} / {e.dispute.reason}
+                    </p>
+                    <p className="text-xs mt-1">등록자: {e.dispute.reporterName}</p>
+                    {e.dispute.status === "resolved" && (
+                      <p className="text-xs mt-1">
+                        해결: {e.dispute.resolutionStatus || "-"} / {e.dispute.resolutionNote || "메모 없음"}
+                      </p>
+                    )}
+                    {isAdminUser && e.dispute.status === "open" && (
+                      <div className="mt-2 flex gap-2 flex-wrap">
+                        <button disabled={busy} onClick={() => resolveDispute(e, "done")} className="btn-secondary text-sm">분쟁: 완료 확정</button>
+                        <button disabled={busy} onClick={() => resolveDispute(e, "cancelled")} className="btn-danger text-sm">분쟁: 취소 확정</button>
+                      </div>
+                    )}
+                  </div>
                 )}
-                {e.status !== "done" && e.status !== "cancelled" && (
-                  <button
-                    disabled={busy}
-                    onClick={() => {
-                      if (confirm("정말 취소하시겠어요? 상태에 따라 패널티가 적용될 수 있습니다.")) {
-                        updateErrand(e.id, { status: "cancelled" });
+
+                {e.reviews && e.reviews.length > 0 && (
+                  <div className="mt-2 p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg">
+                    <p className="text-sm font-medium text-indigo-900">리뷰 {e.reviews.length}개</p>
+                    <ul className="mt-1 text-xs text-indigo-800 space-y-1">
+                      {e.reviews.map((r) => (
+                        <li key={r.id}>
+                          {r.reviewerName} → {r.targetRole === "helper" ? "수행자" : "의뢰자"}: {"★".repeat(r.rating)}
+                          {r.comment ? ` · ${r.comment}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {canUploadProof && (
+                  <div className="mt-3 p-2.5 rounded-lg border border-slate-200 bg-slate-50">
+                    <p className="text-xs text-slate-600 mb-2">수행 완료 증빙을 올린 후 의뢰자 승인으로 정산됩니다.</p>
+                    <input
+                      placeholder="증빙 메모 (예: 물건 전달 완료, 영수증 전달)"
+                      value={proofNotes[e.id] || ""}
+                      onChange={(ev) => setProofNotes((prev) => ({ ...prev, [e.id]: ev.target.value }))}
+                      className="input-field text-sm"
+                    />
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="mt-2 text-xs"
+                      onChange={(ev) => {
+                        const file = ev.target.files?.[0] || null;
+                        setProofFiles((prev) => ({ ...prev, [e.id]: file }));
+                      }}
+                    />
+                    <button disabled={busy} onClick={() => uploadProof(e)} className="btn-secondary text-sm mt-2">증빙 업로드</button>
+                  </div>
+                )}
+
+                <div className="flex gap-2 mt-3 flex-wrap">
+                  {canPay && e.payment.status === "pending" && (
+                    <button disabled={busy} onClick={() => readyPayment(e)} className="btn-secondary text-sm">결제 준비</button>
+                  )}
+
+                  {canPay && (e.payment.status === "ready" || e.payment.status === "pending") && (
+                    <button disabled={busy} onClick={() => confirmPayment(e)} className="btn-secondary text-sm">결제 확정</button>
+                  )}
+
+                  {canMatch && (
+                    <button
+                      disabled={busy || (isAdminUser && !helperName.trim())}
+                      onClick={() =>
+                        updateErrand(
+                          e.id,
+                          isAdminUser ? { status: "matched", helper: helperName.trim() } : { status: "matched" },
+                        )
                       }
-                    }}
-                    className="btn-danger text-sm"
-                  >
-                    취소
-                  </button>
-                )}
+                      className="btn-secondary text-sm disabled:opacity-50"
+                    >
+                      {isAdminUser ? "관리자 매칭" : "내가 수행하기(매칭)"}
+                    </button>
+                  )}
+
+                  {canStart && (
+                    <button disabled={busy} onClick={() => updateErrand(e.id, { status: "in_progress" })} className="btn-secondary text-sm">진행 시작</button>
+                  )}
+
+                  {canApprove && (
+                    <button disabled={busy} onClick={() => approveCompletion(e)} className="btn-secondary text-sm">완료 승인·정산</button>
+                  )}
+
+                  {canOpenDispute && e.dispute?.status !== "open" && e.status !== "done" && (
+                    <button disabled={busy} onClick={() => openDispute(e)} className="btn-danger text-sm">이의제기</button>
+                  )}
+
+                  {canReview && (
+                    <button disabled={busy} onClick={() => submitReview(e)} className="btn-secondary text-sm">리뷰 작성</button>
+                  )}
+
+                  {e.status !== "done" && e.status !== "cancelled" && (mineAsRequester || mineAsHelper || isAdminUser) && (
+                    <button
+                      disabled={busy}
+                      onClick={() => {
+                        if (confirm("정말 취소하시겠어요? 상태에 따라 패널티가 적용될 수 있습니다.")) {
+                          updateErrand(e.id, { status: "cancelled" });
+                        }
+                      }}
+                      className="btn-danger text-sm"
+                    >
+                      취소
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 

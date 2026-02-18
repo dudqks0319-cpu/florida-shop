@@ -20,7 +20,11 @@ export async function POST(req: NextRequest) {
   const item = db.verifications.find((v) => v.id === requestId);
   if (!item) return NextResponse.json({ error: "인증 요청을 찾을 수 없습니다." }, { status: 404 });
 
-  if (item.requester !== currentUser.name) {
+  const isRequesterOwner = item.requesterId
+    ? item.requesterId === currentUser.id
+    : item.requester === currentUser.name;
+
+  if (!isRequesterOwner) {
     return NextResponse.json({ error: "본인 인증 요청만 확인할 수 있습니다." }, { status: 403 });
   }
   if (currentUser.apartment && item.apartment !== currentUser.apartment) {

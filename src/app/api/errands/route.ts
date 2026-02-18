@@ -34,19 +34,16 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const title = String(body?.title || "").trim();
-    const requester = String(body?.requester || "").trim();
-    const apartment = String(body?.apartment || "").trim();
+    const requester = currentUser.name;
+    const apartment = String(body?.apartment || currentUser.apartment || "").trim();
     const rewardKrw = Number(body?.rewardKrw || 0);
     const verificationRequestId = String(body?.verificationRequestId || "").trim();
     const detail = String(body?.detail || "").trim();
     const category = String(body?.category || "etc").trim();
     const paymentMethod = String(body?.paymentMethod || "card").trim();
 
-    if (!title || !requester || !apartment || !rewardKrw || !verificationRequestId) {
-      return NextResponse.json({ error: "필수 항목(제목/의뢰자/아파트/금액/동네인증)이 비었습니다." }, { status: 400 });
-    }
-    if (requester !== currentUser.name) {
-      return NextResponse.json({ error: "로그인 계정 이름과 의뢰자 이름이 일치해야 합니다." }, { status: 403 });
+    if (!title || !apartment || !rewardKrw || !verificationRequestId) {
+      return NextResponse.json({ error: "필수 항목(제목/아파트/금액/동네인증)이 비었습니다." }, { status: 400 });
     }
     if (currentUser.apartment && apartment !== currentUser.apartment) {
       return NextResponse.json({ error: "회원가입한 주소지(아파트)로만 의뢰를 등록할 수 있습니다." }, { status: 403 });
@@ -82,8 +79,12 @@ export async function POST(req: NextRequest) {
     if (new Date(verified.expiresAt).getTime() < Date.now()) {
       return NextResponse.json({ error: "동네 인증이 만료되었습니다. 다시 인증해주세요." }, { status: 403 });
     }
-    if (verified.requester !== requester || verified.apartment !== apartment) {
-      return NextResponse.json({ error: "인증한 이름/아파트와 의뢰 정보가 일치하지 않습니다." }, { status: 403 });
+    const sameVerificationOwner = verified.requesterId
+      ? verified.requesterId === currentUser.id
+      : verified.requester === requester;
+
+    if (!sameVerificationOwner || verified.apartment !== apartment) {
+      return NextResponse.json({ error: "인증한 계정/아파트와 의뢰 정보가 일치하지 않습니다." }, { status: 403 });
     }
 
     if (!db.meta) db.meta = {};
@@ -101,6 +102,7 @@ export async function POST(req: NextRequest) {
       category: category as "convenience" | "delivery" | "bank" | "admin" | "etc",
       rewardKrw,
       requester,
+      requesterId: currentUser.id,
       apartment,
       status: "open" as const,
       payment: {

@@ -57,6 +57,37 @@ export type PaymentInfo = {
   failedReason?: string;
 };
 
+export type CompletionProof = {
+  note?: string;
+  imageUrl?: string;
+  uploadedAt: string;
+  helperId: string;
+  helperName: string;
+};
+
+export type ErrandDispute = {
+  status: "open" | "resolved";
+  reason: string;
+  reporterId: string;
+  reporterName: string;
+  createdAt: string;
+  resolvedAt?: string;
+  resolverId?: string;
+  resolverName?: string;
+  resolutionNote?: string;
+  resolutionStatus?: "done" | "cancelled";
+};
+
+export type ErrandReview = {
+  id: string;
+  reviewerId: string;
+  reviewerName: string;
+  targetRole: "requester" | "helper";
+  rating: number;
+  comment?: string;
+  createdAt: string;
+};
+
 export type Errand = {
   id: string;
   title: string;
@@ -64,18 +95,27 @@ export type Errand = {
   category: "convenience" | "delivery" | "bank" | "admin" | "etc";
   rewardKrw: number;
   requester: string;
+  requesterId?: string;
   apartment: string;
   status: ErrandStatus;
   helper?: string;
+  helperId?: string;
   payment: PaymentInfo;
   settlement?: Settlement;
   cancellation?: Cancellation;
+  proof?: CompletionProof;
+  dispute?: ErrandDispute;
+  reviews?: ErrandReview[];
+  approvedAt?: string;
+  approvedById?: string;
+  approvedByName?: string;
   createdAt: string;
 };
 
 export type VerificationRequest = {
   id: string;
   requester: string;
+  requesterId?: string;
   apartment: string;
   dong: string;
   code: string;
@@ -107,30 +147,67 @@ export function makeSessionToken() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
+function normalizeRating(value: unknown) {
+  const n = Number(value);
+  if (!Number.isInteger(n)) return 5;
+  return Math.min(5, Math.max(1, n));
+}
+
 export async function readDB(): Promise<DB> {
   try {
     const raw = await fs.readFile(dbFile, "utf-8");
     const parsed = JSON.parse(raw) as Partial<DB>;
-    return {
-      users: (parsed.users || []).map((u) => ({
-        ...u,
-        email: u.email ? String(u.email).toLowerCase() : undefined,
-        provider: (u.provider as AuthProvider | undefined) || (u.passwordHash ? "email" : undefined),
-      })),
-      sessions: parsed.sessions || [],
-      errands: (parsed.errands || []).map((e) => ({
+
+    const users = (parsed.users || []).map((u) => ({
+      ...u,
+      email: u.email ? String(u.email).toLowerCase() : undefined,
+      provider: (u.provider as AuthProvider | undefined) || (u.passwordHash ? "email" : undefined),
+    })) as AppUser[];
+
+    const userIdByName = new Map<string, string>();
+    for (const user of users) {
+      if (!userIdByName.has(user.name)) {
+        userIdByName.set(user.name, user.id);
+      }
+    }
+
+    const errands = (parsed.errands || []).map((e) => {
+      const requester = String(e.requester || "").trim();
+      const helper = e.helper ? String(e.helper).trim() : undefined;
+      const payment = e.payment || {
+        method: "card",
+        status: "pending",
+        provider: "mock",
+        orderId: `legacy-${e.id}`,
+      };
+
+      return {
         ...e,
-        payment: e.payment || {
-          method: "card",
-          status: "pending",
-          provider: "mock",
-          orderId: `legacy-${e.id}`,
-        },
-      })),
-      verifications: (parsed.verifications || []).map((v) => ({
-        ...v,
-        attempts: typeof v.attempts === "number" ? v.attempts : 0,
-      })),
+        requester,
+        requesterId: e.requesterId || (requester ? userIdByName.get(requester) : undefined),
+        helper,
+        helperId: e.helperId || (helper ? userIdByName.get(helper) : undefined),
+        payment,
+        proof: e.proof || undefined,
+        dispute: e.dispute || undefined,
+        reviews: (e.reviews || []).map((r) => ({
+          ...r,
+          rating: normalizeRating(r.rating),
+        })),
+      } as Errand;
+    });
+
+    const verifications = (parsed.verifications || []).map((v) => ({
+      ...v,
+      requesterId: v.requesterId || (v.requester ? userIdByName.get(v.requester) : undefined),
+      attempts: typeof v.attempts === "number" ? v.attempts : 0,
+    })) as VerificationRequest[];
+
+    return {
+      users,
+      sessions: parsed.sessions || [],
+      errands,
+      verifications,
       meta: parsed.meta || {},
     };
   } catch {

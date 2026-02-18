@@ -38,6 +38,10 @@ export async function POST(req: NextRequest) {
       registerLoginFailure(ip);
       return NextResponse.json({ error: "유효하지 않은 역할입니다." }, { status: 400 });
     }
+    if (role === "admin" && process.env.ALLOW_ADMIN_SIGNUP !== "true") {
+      registerLoginFailure(ip);
+      return NextResponse.json({ error: "관리자 계정은 운영자 승인으로만 생성됩니다." }, { status: 403 });
+    }
     if (!( ["email", "kakao", "google", "naver"] as const).includes(provider)) {
       registerLoginFailure(ip);
       return NextResponse.json({ error: "유효하지 않은 가입 방식입니다." }, { status: 400 });

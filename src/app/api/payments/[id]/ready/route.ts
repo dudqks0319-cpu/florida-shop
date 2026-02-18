@@ -22,7 +22,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (idx < 0) return NextResponse.json({ error: "의뢰를 찾을 수 없습니다." }, { status: 404 });
 
   const errand = db.errands[idx];
-  if (errand.requester !== user.name && user.role !== "admin") {
+  const isRequesterOwner = errand.requesterId ? errand.requesterId === user.id : errand.requester === user.name;
+  if (!isRequesterOwner && user.role !== "admin") {
     return NextResponse.json({ error: "의뢰자 또는 관리자만 결제를 요청할 수 있습니다." }, { status: 403 });
   }
   if (errand.payment.status === "paid") {

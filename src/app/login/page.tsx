@@ -36,6 +36,7 @@ export default function LoginPage() {
     <main className="max-w-xl mx-auto p-5">
       <h1 className="text-2xl font-bold">로그인</h1>
       <p className="text-sm text-slate-500 mt-1">이메일 로그인 또는 OAuth(카카오/구글/네이버) 로그인</p>
+      <p className="text-xs text-slate-500 mt-1">역할(requester/helper)은 회원가입 시 선택됩니다.</p>
 
       <section className="mt-4 p-4 border rounded-xl bg-white">
         <h2 className="font-semibold">이메일 로그인</h2>

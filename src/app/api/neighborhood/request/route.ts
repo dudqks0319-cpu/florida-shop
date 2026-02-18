@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     db.verifications.unshift({
       id: requestId,
       requester: currentUser.name,
+      requesterId: currentUser.id,
       apartment: currentUser.apartment,
       dong: currentUser.dong,
       code,
