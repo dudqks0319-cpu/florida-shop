@@ -133,6 +133,12 @@ const paymentStatusLabel: Record<string, string> = {
   failed: "결제실패",
 };
 
+const roleLabel: Record<CurrentUser["role"], string> = {
+  requester: "의뢰자",
+  helper: "수행자",
+  admin: "관리자",
+};
+
 const disputeTypeLabel: Record<"no_show" | "quality" | "fake_proof" | "amount" | "etc", string> = {
   no_show: "노쇼/연락두절",
   quality: "요청 품질 불만",
@@ -494,6 +500,29 @@ export default function Home() {
     setVerifiedRequestId("");
     setVerifyRequestId("");
     setNotice({ type: "ok", text: "로그아웃 되었습니다." });
+    setBusy(false);
+  };
+
+  const switchRole = async (nextRole: "requester" | "helper") => {
+    if (!currentUser || busy || currentUser.role === "admin") return;
+    setBusy(true);
+    const res = await fetch("/api/auth/role", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: nextRole }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setNotice({ type: "error", text: json.error || "역할 변경에 실패했습니다." });
+      setBusy(false);
+      return;
+    }
+
+    if (json.user) {
+      setCurrentUser(json.user);
+    }
+    setNotice({ type: "ok", text: `역할이 ${nextRole === "requester" ? "의뢰자" : "수행자"}(으)로 변경되었습니다.` });
+    setScopeFilter("all");
     setBusy(false);
   };
 
@@ -967,11 +996,36 @@ export default function Home() {
       <section id="auth-section" className="card mt-5">
         <h3 className="section-title">로그인 / 권한</h3>
         {currentUser ? (
-          <div className="mt-3">
+          <div className="mt-3 grid gap-2.5">
             <p className="text-sm">
-              현재 로그인: <b>{currentUser.name}</b> ({currentUser.role})
+              현재 로그인: <b>{currentUser.name}</b> ({roleLabel[currentUser.role]})
             </p>
-            <button disabled={busy} onClick={logout} className="btn-secondary mt-2">로그아웃</button>
+            {currentUser.role !== "admin" && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                <p className="text-xs text-slate-600">역할 전환 (의뢰 등록 ↔ 수행 매칭)</p>
+                <div className="mt-2 inline-flex rounded-lg border border-slate-300 bg-white p-1">
+                  <button
+                    type="button"
+                    onClick={() => switchRole("requester")}
+                    disabled={busy || currentUser.role === "requester"}
+                    className="px-3 py-1.5 text-sm rounded-md disabled:opacity-50 bg-transparent aria-[pressed=true]:bg-blue-600 aria-[pressed=true]:text-white"
+                    aria-pressed={currentUser.role === "requester"}
+                  >
+                    의뢰자
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => switchRole("helper")}
+                    disabled={busy || currentUser.role === "helper"}
+                    className="px-3 py-1.5 text-sm rounded-md disabled:opacity-50 bg-transparent aria-[pressed=true]:bg-blue-600 aria-[pressed=true]:text-white"
+                    aria-pressed={currentUser.role === "helper"}
+                  >
+                    수행자
+                  </button>
+                </div>
+              </div>
+            )}
+            <button disabled={busy} onClick={logout} className="btn-secondary">로그아웃</button>
           </div>
         ) : (
           <div className="grid gap-2.5 mt-3">
