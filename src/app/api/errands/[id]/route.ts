@@ -42,8 +42,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   if (nextStatus === "in_progress" && !(isAdmin || isHelper)) {
     return NextResponse.json({ error: "담당 수행자 또는 관리자만 진행 시작할 수 있습니다." }, { status: 403 });
   }
-  if (nextStatus === "done" && !(isAdmin || isHelper)) {
-    return NextResponse.json({ error: "담당 수행자 또는 관리자만 완료 처리할 수 있습니다." }, { status: 403 });
+  if (nextStatus === "done" && !isAdmin) {
+    return NextResponse.json(
+      { error: "완료 처리는 관리자만 직접 변경할 수 있습니다. 일반 흐름은 증빙 업로드 후 의뢰자 승인(approve)을 사용해주세요." },
+      { status: 403 },
+    );
   }
   if (nextStatus === "cancelled" && !(isAdmin || isRequester || isHelper)) {
     return NextResponse.json({ error: "의뢰자/담당 수행자/관리자만 취소할 수 있습니다." }, { status: 403 });
@@ -107,6 +110,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if ((nextStatus === "in_progress" || nextStatus === "done") && !updated.helper) {
     return NextResponse.json({ error: "수행자 없이 진행/완료 처리할 수 없습니다." }, { status: 400 });
+  }
+
+  if (nextStatus === "done" && !updated.proof) {
+    return NextResponse.json({ error: "완료 증빙 업로드 후에만 완료 처리할 수 있습니다." }, { status: 400 });
   }
 
   if (nextStatus === "done") {
