@@ -193,6 +193,8 @@ export default function Home() {
   >({});
   const [reviewFormOpen, setReviewFormOpen] = useState<Record<string, boolean>>({});
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, { rating: number; comment: string }>>({});
+  const [adminResolvePanelOpen, setAdminResolvePanelOpen] = useState<Record<string, boolean>>({});
+  const [adminResolveDrafts, setAdminResolveDrafts] = useState<Record<string, { decision: "done" | "cancelled"; note: string }>>({});
 
   const openCount = useMemo(() => errands.filter((e) => e.status === "open").length, [errands]);
   const doneCount = useMemo(() => errands.filter((e) => e.status === "done").length, [errands]);
@@ -688,14 +690,63 @@ export default function Home() {
     setBusy(false);
   };
 
-  const resolveDispute = async (e: Errand, decision: "done" | "cancelled") => {
-    const note = window.prompt(`분쟁 ${decision === "done" ? "완료확정" : "취소확정"} 메모를 입력해주세요.`, "");
+  const buildAdminResolveNote = (e: Errand, decision: "done" | "cancelled") => {
+    const disputeType = e.dispute?.reasonType ? disputeTypeLabel[e.dispute.reasonType] : "기타";
+    const baseReason = e.dispute?.reason || "사유 미입력";
+    const evidence = e.dispute?.evidenceNote || "추가 증빙 메모 없음";
 
+    if (decision === "done") {
+      return [
+        `[관리자 분쟁 처리 안내]`,
+        `- 분쟁 유형: ${disputeType}`,
+        `- 확인 내용: ${baseReason}`,
+        `- 증빙 검토: ${evidence}`,
+        `- 판단 결과: 수행 완료로 확정합니다.`,
+        `- 후속 처리: 의뢰를 완료 상태로 전환하고 정산을 진행합니다.`,
+      ].join("\n");
+    }
+
+    return [
+      `[관리자 분쟁 처리 안내]`,
+      `- 분쟁 유형: ${disputeType}`,
+      `- 확인 내용: ${baseReason}`,
+      `- 증빙 검토: ${evidence}`,
+      `- 판단 결과: 거래 취소로 확정합니다.`,
+      `- 후속 처리: 취소 정책에 따라 패널티/보상 규칙을 반영합니다.`,
+    ].join("\n");
+  };
+
+  const openAdminResolvePanel = (e: Errand, initialDecision: "done" | "cancelled" = "done") => {
+    setAdminResolvePanelOpen((prev) => ({ ...prev, [e.id]: true }));
+    setAdminResolveDrafts((prev) => ({
+      ...prev,
+      [e.id]:
+        prev[e.id] || {
+          decision: initialDecision,
+          note: buildAdminResolveNote(e, initialDecision),
+        },
+    }));
+  };
+
+  const regenerateAdminResolveDraft = (e: Errand) => {
+    const draft = adminResolveDrafts[e.id];
+    const decision = draft?.decision || "done";
+    setAdminResolveDrafts((prev) => ({
+      ...prev,
+      [e.id]: {
+        decision,
+        note: buildAdminResolveNote(e, decision),
+      },
+    }));
+    setNotice({ type: "ok", text: "분쟁 안내문 초안을 다시 생성했습니다." });
+  };
+
+  const resolveDispute = async (e: Errand, decision: "done" | "cancelled", note?: string) => {
     setBusy(true);
     const res = await fetch(`/api/errands/${e.id}/dispute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "resolve", decision, note }),
+      body: JSON.stringify({ action: "resolve", decision, note: note?.trim() || undefined }),
     });
     const json = await res.json();
     if (!res.ok) {
@@ -703,7 +754,8 @@ export default function Home() {
       setBusy(false);
       return;
     }
-    setNotice({ type: "ok", text: "분쟁이 해결되었습니다." });
+    setAdminResolvePanelOpen((prev) => ({ ...prev, [e.id]: false }));
+    setNotice({ type: "ok", text: "분쟁이 해결되었습니다. 결과 안내문이 기록되었습니다." });
     await refresh();
     setBusy(false);
   };
@@ -1349,9 +1401,97 @@ export default function Home() {
                       </p>
                     )}
                     {isAdminUser && e.dispute.status === "open" && (
-                      <div className="mt-2 flex gap-2 flex-wrap">
-                        <button disabled={busy} onClick={() => resolveDispute(e, "done")} className="btn-secondary text-sm">분쟁: 완료 확정</button>
-                        <button disabled={busy} onClick={() => resolveDispute(e, "cancelled")} className="btn-danger text-sm">분쟁: 취소 확정</button>
+                      <div className="mt-2">
+                        <div className="flex gap-2 flex-wrap">
+                          <button
+                            disabled={busy}
+                            onClick={() => openAdminResolvePanel(e)}
+                            className="btn-secondary text-sm"
+                          >
+                            분쟁 처리 보드 열기
+                          </button>
+                          <button
+                            disabled={busy}
+                            onClick={() => openAdminResolvePanel(e, "cancelled")}
+                            className="btn-danger text-sm"
+                          >
+                            취소안 초안 바로열기
+                          </button>
+                        </div>
+
+                        {adminResolvePanelOpen[e.id] && (
+                          <div className="mt-2 p-2.5 rounded-lg border border-slate-200 bg-white text-slate-700">
+                            <p className="text-xs font-semibold text-slate-600">분쟁 자동초안 → 검토 → 결과 반영</p>
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              초안 생성 후 문구를 수정하고, 최종 결과를 반영하면 해당 문구가 해결 메모로 저장됩니다.
+                            </p>
+
+                            <div className="mt-2 grid grid-cols-1 sm:grid-cols-[170px_1fr] gap-2">
+                              <select
+                                value={adminResolveDrafts[e.id]?.decision || "done"}
+                                onChange={(ev) => {
+                                  const decision = ev.target.value as "done" | "cancelled";
+                                  setAdminResolveDrafts((prev) => ({
+                                    ...prev,
+                                    [e.id]: {
+                                      decision,
+                                      note: prev[e.id]?.note || buildAdminResolveNote(e, decision),
+                                    },
+                                  }));
+                                }}
+                                className="input-field text-sm"
+                              >
+                                <option value="done">완료 확정</option>
+                                <option value="cancelled">취소 확정</option>
+                              </select>
+                              <button
+                                disabled={busy}
+                                onClick={() => regenerateAdminResolveDraft(e)}
+                                className="btn-secondary text-sm"
+                              >
+                                자동초안 다시 생성
+                              </button>
+                            </div>
+
+                            <textarea
+                              className="input-field text-sm mt-2 w-full min-h-[110px]"
+                              value={adminResolveDrafts[e.id]?.note || ""}
+                              onChange={(ev) =>
+                                setAdminResolveDrafts((prev) => ({
+                                  ...prev,
+                                  [e.id]: {
+                                    decision: prev[e.id]?.decision || "done",
+                                    note: ev.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder="분쟁 결과 안내문 초안을 입력하세요"
+                            />
+
+                            <div className="mt-2 flex gap-2 flex-wrap">
+                              <button
+                                disabled={busy}
+                                onClick={() =>
+                                  resolveDispute(
+                                    e,
+                                    adminResolveDrafts[e.id]?.decision || "done",
+                                    adminResolveDrafts[e.id]?.note || "",
+                                  )
+                                }
+                                className="btn-primary text-sm"
+                              >
+                                결과 반영(발송)
+                              </button>
+                              <button
+                                disabled={busy}
+                                onClick={() => setAdminResolvePanelOpen((prev) => ({ ...prev, [e.id]: false }))}
+                                className="btn-secondary text-sm"
+                              >
+                                닫기
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
