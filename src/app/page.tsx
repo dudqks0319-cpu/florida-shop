@@ -204,6 +204,21 @@ export default function Home() {
   );
   const isNeighborhoodVerified = Boolean(verifiedRequestId || currentUser?.neighborhoodVerifiedAt);
 
+  const myPendingPaymentCount = useMemo(
+    () => errands.filter((e) => isRequesterOwnerForUser(e, currentUser) && e.status === "open" && e.payment.status === "pending").length,
+    [currentUser, errands],
+  );
+
+  const myApprovalWaitingCount = useMemo(
+    () => errands.filter((e) => isRequesterOwnerForUser(e, currentUser) && e.status === "in_progress" && Boolean(e.proof)).length,
+    [currentUser, errands],
+  );
+
+  const myActiveHelperCount = useMemo(
+    () => errands.filter((e) => isAssignedHelperForUser(e, currentUser) && ["matched", "in_progress"].includes(e.status)).length,
+    [currentUser, errands],
+  );
+
   const mapQuery = useMemo(() => {
     if (!selectedAddr) return "울산광역시";
     return selectedAddr.roadAddr || selectedAddr.jibunAddr || `${selectedAddr.siNm} ${selectedAddr.sggNm} ${selectedAddr.emdNm}`;
@@ -866,8 +881,35 @@ export default function Home() {
         </div>
       )}
 
+      <section className="card quick-action-card mt-5">
+        <h3 className="section-title">토스 스타일 빠른 진행</h3>
+        <p className="text-xs text-slate-500 mt-1">지금 바로 필요한 액션만 한 번에 확인하세요.</p>
+        <div className="quick-action-grid mt-3">
+          <a href="#verify-section" className="quick-action-item">
+            <p className="quick-action-item__label">동네 인증</p>
+            <p className="quick-action-item__value">{isNeighborhoodVerified ? "완료" : "필요"}</p>
+            <p className="quick-action-item__hint">의뢰 등록 전에 주소 인증을 확인해주세요.</p>
+          </a>
+          <a href="#list-section" className="quick-action-item">
+            <p className="quick-action-item__label">내 결제 대기</p>
+            <p className="quick-action-item__value">{myPendingPaymentCount}건</p>
+            <p className="quick-action-item__hint">결제 확정 전에는 매칭이 시작되지 않습니다.</p>
+          </a>
+          <a href="#list-section" className="quick-action-item">
+            <p className="quick-action-item__label">내 승인 대기</p>
+            <p className="quick-action-item__value">{myApprovalWaitingCount}건</p>
+            <p className="quick-action-item__hint">증빙 확인 후 승인하면 정산이 완료됩니다.</p>
+          </a>
+          <a href="#list-section" className="quick-action-item">
+            <p className="quick-action-item__label">내 수행 진행</p>
+            <p className="quick-action-item__value">{myActiveHelperCount}건</p>
+            <p className="quick-action-item__hint">진행중이면 증빙 업로드까지 완료해주세요.</p>
+          </a>
+        </div>
+      </section>
+
       {/* 로그인 / 권한 */}
-      <section className="card mt-5">
+      <section id="auth-section" className="card mt-5">
         <h3 className="section-title">로그인 / 권한</h3>
         {currentUser ? (
           <div className="mt-3">
@@ -890,7 +932,7 @@ export default function Home() {
       </section>
 
       {/* 동네 인증 */}
-      <section className="card mt-5">
+      <section id="verify-section" className="card mt-5">
         <h3 className="section-title">동네 인증</h3>
         {verifiedDongne ? (
           <div className="mt-3 text-green-800 bg-green-50 rounded-lg p-3 border border-green-200">
@@ -1030,7 +1072,7 @@ export default function Home() {
       </section>
 
       {/* 심부름 의뢰 등록 */}
-      <section className="card mt-5">
+      <section id="create-section" className="card mt-5">
         <h3 className="section-title">심부름 의뢰 등록</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
           <input placeholder="제목 (예: 편의점 다녀와주세요)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="input-field" maxLength={80} />
@@ -1110,7 +1152,7 @@ export default function Home() {
       </section>
 
       {/* 의뢰 목록 */}
-      <section className="card mt-5">
+      <section id="list-section" className="card mt-5">
         <h3 className="section-title">의뢰 목록</h3>
         <p className="text-xs text-slate-500 mt-1">상태는 15초마다 자동 갱신됩니다.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
@@ -1524,36 +1566,18 @@ export default function Home() {
         .app-shell {
           position: relative;
           isolation: isolate;
+          scroll-behavior: smooth;
         }
 
         .app-bg-orb {
-          position: absolute;
-          z-index: -1;
-          width: 340px;
-          height: 340px;
-          border-radius: 999px;
-          filter: blur(70px);
-          opacity: 0.35;
-          pointer-events: none;
-        }
-
-        .app-bg-orb-top {
-          top: -80px;
-          right: -100px;
-          background: radial-gradient(circle at 30% 30%, #7dd3fc, #3b82f6 60%, #2563eb 100%);
-        }
-
-        .app-bg-orb-bottom {
-          bottom: 120px;
-          left: -120px;
-          background: radial-gradient(circle at 30% 30%, #c4b5fd, #818cf8 60%, #6366f1 100%);
+          display: none;
         }
 
         .hero-card {
-          border-radius: 24px;
-          border: 1px solid rgba(148, 163, 184, 0.2);
-          background: linear-gradient(135deg, #ffffff 0%, #eff6ff 55%, #eef2ff 100%);
-          box-shadow: 0 24px 50px rgba(15, 23, 42, 0.1);
+          border-radius: 26px;
+          border: 1px solid #e6e8eb;
+          background: #ffffff;
+          box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
           padding: 20px;
         }
 
@@ -1566,30 +1590,27 @@ export default function Home() {
         .hero-badge {
           display: inline-flex;
           align-items: center;
-          gap: 6px;
           font-size: 12px;
           font-weight: 700;
-          color: #1e3a8a;
-          background: #dbeafe;
-          border: 1px solid #bfdbfe;
+          color: #1f6fff;
+          background: #eaf3ff;
           border-radius: 999px;
-          padding: 5px 10px;
+          padding: 6px 11px;
           margin-bottom: 10px;
           width: fit-content;
         }
 
         .hero-sidecard {
-          background: rgba(255, 255, 255, 0.76);
-          border: 1px solid rgba(148, 163, 184, 0.25);
+          background: #f7f9fc;
+          border: 1px solid #edf0f3;
           border-radius: 16px;
           padding: 12px;
-          backdrop-filter: blur(8px);
         }
 
         .hero-admin-link {
           display: inline-flex;
           margin-top: 10px;
-          color: #1d4ed8;
+          color: #3182f6;
           font-size: 13px;
           font-weight: 700;
           text-decoration: none;
@@ -1607,161 +1628,209 @@ export default function Home() {
         }
 
         .hero-stat {
-          background: rgba(255, 255, 255, 0.78);
-          border: 1px solid rgba(148, 163, 184, 0.25);
+          background: #f7f9fc;
+          border: 1px solid #edf0f3;
           border-radius: 14px;
-          padding: 10px 12px;
+          padding: 11px 12px;
         }
 
         .hero-stat__label {
           font-size: 11px;
-          color: #64748b;
+          color: #8b95a1;
           margin-bottom: 4px;
           font-weight: 600;
         }
 
         .hero-stat__value {
-          font-size: 16px;
+          font-size: 17px;
           font-weight: 800;
-          color: #0f172a;
+          color: #191f28;
         }
 
         .card {
-          background: rgba(255, 255, 255, 0.86);
-          border: 1px solid rgba(226, 232, 240, 0.95);
-          border-radius: 20px;
+          background: #ffffff;
+          border: 1px solid #e9ecef;
+          border-radius: 22px;
           padding: 16px;
-          box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
-          backdrop-filter: blur(12px);
+          box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+        }
+
+        .quick-action-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+
+        .quick-action-item {
+          display: block;
+          text-decoration: none;
+          color: inherit;
+          border: 1px solid #edf0f3;
+          background: #f7f9fc;
+          border-radius: 14px;
+          padding: 12px;
+          transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+        }
+
+        .quick-action-item:hover {
+          border-color: #c9ddff;
+          transform: translateY(-1px);
+          box-shadow: 0 8px 18px rgba(49, 130, 246, 0.12);
+        }
+
+        .quick-action-item__label {
+          font-size: 12px;
+          color: #8b95a1;
+          font-weight: 600;
+        }
+
+        .quick-action-item__value {
+          margin-top: 4px;
+          font-size: 18px;
+          line-height: 1.2;
+          font-weight: 800;
+          color: #191f28;
+        }
+
+        .quick-action-item__hint {
+          margin-top: 5px;
+          font-size: 12px;
+          color: #6b7684;
+          line-height: 1.4;
         }
 
         .section-title {
-          font-size: 16px;
+          font-size: 17px;
           line-height: 1.4;
           font-weight: 800;
-          color: #0f172a;
+          color: #191f28;
           letter-spacing: -0.01em;
         }
 
         .input-field {
-          border: 1px solid #cbd5e1;
+          border: 1px solid #e5e8eb;
           border-radius: 12px;
           padding: 10px 12px;
-          background: rgba(255, 255, 255, 0.96);
+          background: #ffffff;
+          color: #191f28;
           font-size: 14px;
           outline: none;
-          transition: border-color 0.15s, box-shadow 0.15s;
+          transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
           min-height: 42px;
         }
 
         .input-field:focus {
-          border-color: #3b82f6;
-          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+          border-color: #9bc2ff;
+          box-shadow: 0 0 0 3px rgba(49, 130, 246, 0.14);
         }
 
         .input-field:disabled {
-          background: #f8fafc;
-          color: #64748b;
+          background: #f2f4f6;
+          color: #8b95a1;
         }
 
         .btn-primary {
           border: none;
-          background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+          background: #3182f6;
           color: #fff;
           border-radius: 12px;
           padding: 10px 16px;
           cursor: pointer;
           font-weight: 700;
           font-size: 14px;
-          transition: transform 0.12s ease, box-shadow 0.15s ease, opacity 0.15s ease;
-          box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
+          transition: background-color 0.15s, transform 0.1s, opacity 0.15s;
         }
 
         .btn-primary:hover:not(:disabled) {
+          background: #1f6fff;
           transform: translateY(-1px);
-          box-shadow: 0 12px 22px rgba(37, 99, 235, 0.28);
         }
 
         .btn-primary:disabled {
           cursor: not-allowed;
-          opacity: 0.62;
-          box-shadow: none;
+          opacity: 0.6;
         }
 
         .btn-secondary {
-          border: 1px solid #cbd5e1;
-          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+          border: none;
+          background: #f2f4f6;
+          color: #333d4b;
           border-radius: 12px;
           padding: 8px 12px;
           cursor: pointer;
           font-size: 14px;
-          font-weight: 600;
-          transition: border-color 0.15s, background 0.15s, transform 0.1s;
+          font-weight: 700;
+          transition: background-color 0.15s, transform 0.1s;
         }
 
         .btn-secondary:hover:not(:disabled) {
-          background: #f1f5f9;
-          border-color: #94a3b8;
+          background: #e9ecef;
           transform: translateY(-1px);
         }
 
         .btn-secondary:disabled {
-          opacity: 0.5;
+          opacity: 0.55;
           cursor: not-allowed;
           transform: none;
         }
 
         .btn-danger {
-          border: 1px solid #fda4af;
-          background: #fff1f2;
-          color: #be123c;
+          border: none;
+          background: #fdebec;
+          color: #d92d20;
           border-radius: 12px;
           padding: 8px 12px;
           cursor: pointer;
           font-size: 14px;
-          font-weight: 600;
-          transition: background 0.15s, transform 0.1s;
+          font-weight: 700;
+          transition: background-color 0.15s, transform 0.1s;
         }
 
         .btn-danger:hover:not(:disabled) {
-          background: #ffe4e6;
+          background: #fce0e2;
           transform: translateY(-1px);
         }
 
         .btn-danger:disabled {
-          opacity: 0.5;
+          opacity: 0.55;
           cursor: not-allowed;
           transform: none;
         }
 
         .chip-button {
-          border: 1px solid #cbd5e1;
+          border: 1px solid #e5e8eb;
           border-radius: 999px;
           padding: 6px 12px;
           font-size: 12px;
-          font-weight: 600;
-          background: #fff;
-          color: #475569;
+          font-weight: 700;
+          background: #ffffff;
+          color: #6b7684;
           transition: all 0.15s ease;
         }
 
         .chip-button:hover {
-          border-color: #93c5fd;
-          color: #1d4ed8;
+          border-color: #9bc2ff;
+          color: #1f6fff;
         }
 
         .chip-button--active {
-          border-color: #93c5fd;
-          background: #eff6ff;
-          color: #1d4ed8;
+          border-color: #9bc2ff;
+          background: #eaf3ff;
+          color: #1f6fff;
         }
 
         .errand-card {
-          border: 1px solid #e2e8f0;
+          border: 1px solid #e5e8eb;
           border-radius: 18px;
           padding: 14px;
-          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-          box-shadow: 0 8px 16px rgba(15, 23, 42, 0.04);
+          background: #ffffff;
+          box-shadow: 0 3px 12px rgba(15, 23, 42, 0.04);
+          transition: box-shadow 0.15s, transform 0.15s;
+        }
+
+        .errand-card:hover {
+          box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+          transform: translateY(-1px);
         }
 
         @media (min-width: 760px) {
@@ -1770,13 +1839,17 @@ export default function Home() {
           }
 
           .hero-card__header {
-            grid-template-columns: 1fr minmax(260px, 320px);
-            align-items: flex-start;
-            gap: 16px;
+            grid-template-columns: 1fr minmax(280px, 340px);
+            align-items: start;
+            gap: 18px;
           }
 
           .hero-stats {
             grid-template-columns: repeat(4, minmax(0, 1fr));
+          }
+
+          .quick-action-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
           .errand-card {
