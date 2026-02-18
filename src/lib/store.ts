@@ -68,6 +68,10 @@ export type CompletionProof = {
 export type ErrandDispute = {
   status: "open" | "resolved";
   reason: string;
+  reasonType?: "no_show" | "quality" | "fake_proof" | "amount" | "etc";
+  detail?: string;
+  evidenceNote?: string;
+  expectedResolutionHours?: number;
   reporterId: string;
   reporterName: string;
   createdAt: string;

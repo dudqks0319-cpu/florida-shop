@@ -37,13 +37,13 @@ export async function POST(req: NextRequest) {
     const requester = currentUser.name;
     const apartment = String(body?.apartment || currentUser.apartment || "").trim();
     const rewardKrw = Number(body?.rewardKrw || 0);
-    const verificationRequestId = String(body?.verificationRequestId || "").trim();
+    let verificationRequestId = String(body?.verificationRequestId || "").trim();
     const detail = String(body?.detail || "").trim();
     const category = String(body?.category || "etc").trim();
     const paymentMethod = String(body?.paymentMethod || "card").trim();
 
-    if (!title || !apartment || !rewardKrw || !verificationRequestId) {
-      return NextResponse.json({ error: "필수 항목(제목/아파트/금액/동네인증)이 비었습니다." }, { status: 400 });
+    if (!title || !apartment || !rewardKrw) {
+      return NextResponse.json({ error: "필수 항목(제목/아파트/금액)이 비었습니다." }, { status: 400 });
     }
     if (currentUser.apartment && apartment !== currentUser.apartment) {
       return NextResponse.json({ error: "회원가입한 주소지(아파트)로만 의뢰를 등록할 수 있습니다." }, { status: 403 });
@@ -72,20 +72,33 @@ export async function POST(req: NextRequest) {
 
     const db = await readDB();
 
-    const verified = db.verifications.find((v) => v.id === verificationRequestId);
+    const nowMs = Date.now();
+    const isSameVerificationOwner = (verification: (typeof db.verifications)[number]) =>
+      verification.requesterId ? verification.requesterId === currentUser.id : verification.requester === requester;
+
+    const verified = verificationRequestId
+      ? db.verifications.find((v) => v.id === verificationRequestId)
+      : db.verifications.find(
+          (v) =>
+            v.verified &&
+            isSameVerificationOwner(v) &&
+            v.apartment === apartment &&
+            new Date(v.expiresAt).getTime() >= nowMs,
+        );
+
     if (!verified || !verified.verified) {
       return NextResponse.json({ error: "동네 인증 완료 후 의뢰를 등록할 수 있습니다." }, { status: 403 });
     }
-    if (new Date(verified.expiresAt).getTime() < Date.now()) {
+
+    if (new Date(verified.expiresAt).getTime() < nowMs) {
       return NextResponse.json({ error: "동네 인증이 만료되었습니다. 다시 인증해주세요." }, { status: 403 });
     }
-    const sameVerificationOwner = verified.requesterId
-      ? verified.requesterId === currentUser.id
-      : verified.requester === requester;
 
-    if (!sameVerificationOwner || verified.apartment !== apartment) {
+    if (!isSameVerificationOwner(verified) || verified.apartment !== apartment) {
       return NextResponse.json({ error: "인증한 계정/아파트와 의뢰 정보가 일치하지 않습니다." }, { status: 403 });
     }
+
+    verificationRequestId = verificationRequestId || verified.id;
 
     if (!db.meta) db.meta = {};
     if (!db.meta.pilotApartment) {

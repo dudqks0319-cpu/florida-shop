@@ -70,6 +70,10 @@ type Errand = {
   dispute?: {
     status: "open" | "resolved";
     reason: string;
+    reasonType?: "no_show" | "quality" | "fake_proof" | "amount" | "etc";
+    detail?: string;
+    evidenceNote?: string;
+    expectedResolutionHours?: number;
     reporterId: string;
     reporterName: string;
     createdAt: string;
@@ -129,8 +133,26 @@ const paymentStatusLabel: Record<string, string> = {
   failed: "결제실패",
 };
 
+const disputeTypeLabel: Record<"no_show" | "quality" | "fake_proof" | "amount" | "etc", string> = {
+  no_show: "노쇼/연락두절",
+  quality: "요청 품질 불만",
+  fake_proof: "허위/부족한 증빙",
+  amount: "금액/정산 분쟁",
+  etc: "기타",
+};
+
 function formatKrw(n: number) {
   return n.toLocaleString("ko-KR") + "원";
+}
+
+function isRequesterOwnerForUser(e: Errand, user: CurrentUser | null) {
+  if (!user) return false;
+  return e.requesterId ? e.requesterId === user.id : e.requester === user.name;
+}
+
+function isAssignedHelperForUser(e: Errand, user: CurrentUser | null) {
+  if (!user) return false;
+  return e.helperId ? e.helperId === user.id : e.helper === user.name;
 }
 
 export default function Home() {
@@ -158,12 +180,29 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | Errand["status"]>("all");
+  const [scopeFilter, setScopeFilter] = useState<"all" | "mine_requester" | "mine_helper">("all");
   const [searchKeyword, setSearchKeyword] = useState("");
   const [proofNotes, setProofNotes] = useState<Record<string, string>>({});
   const [proofFiles, setProofFiles] = useState<Record<string, File | null>>({});
+  const [verifyRemainSec, setVerifyRemainSec] = useState(0);
+  const [resendCooldownSec, setResendCooldownSec] = useState(0);
+  const [verificationGuide, setVerificationGuide] = useState("");
+  const [disputeFormOpen, setDisputeFormOpen] = useState<Record<string, boolean>>({});
+  const [disputeDrafts, setDisputeDrafts] = useState<
+    Record<string, { reasonType: "no_show" | "quality" | "fake_proof" | "amount" | "etc"; detail: string; evidenceNote: string }>
+  >({});
+  const [reviewFormOpen, setReviewFormOpen] = useState<Record<string, boolean>>({});
+  const [reviewDrafts, setReviewDrafts] = useState<Record<string, { rating: number; comment: string }>>({});
 
   const openCount = useMemo(() => errands.filter((e) => e.status === "open").length, [errands]);
+  const doneCount = useMemo(() => errands.filter((e) => e.status === "done").length, [errands]);
+  const openDisputeCount = useMemo(() => errands.filter((e) => e.dispute?.status === "open").length, [errands]);
   const totalPenalty = useMemo(() => errands.reduce((sum, e) => sum + (e.cancellation?.requesterPenaltyKrw ?? 0), 0), [errands]);
+  const settledAmount = useMemo(
+    () => errands.reduce((sum, e) => sum + (e.settlement?.status === "paid" ? e.settlement.helperPayoutKrw : 0), 0),
+    [errands],
+  );
+  const isNeighborhoodVerified = Boolean(verifiedRequestId || currentUser?.neighborhoodVerifiedAt);
 
   const mapQuery = useMemo(() => {
     if (!selectedAddr) return "울산광역시";
@@ -180,25 +219,191 @@ export default function Home() {
         e.detail.toLowerCase().includes(keyword) ||
         e.requester.toLowerCase().includes(keyword) ||
         e.apartment.toLowerCase().includes(keyword);
-      return byStatus && byKeyword;
+
+      const byScope =
+        scopeFilter === "all"
+          ? true
+          : scopeFilter === "mine_requester"
+            ? isRequesterOwnerForUser(e, currentUser)
+            : isAssignedHelperForUser(e, currentUser);
+
+      return byStatus && byKeyword && byScope;
     });
-  }, [errands, statusFilter, searchKeyword]);
+  }, [currentUser, errands, scopeFilter, statusFilter, searchKeyword]);
 
-  const isRequesterOwner = (e: Errand) => {
-    if (!currentUser) return false;
-    return e.requesterId ? e.requesterId === currentUser.id : e.requester === currentUser.name;
+  const trustByUser = useMemo(() => {
+    const stats = new Map<
+      string,
+      {
+        name: string;
+        done: number;
+        cancelled: number;
+        finalCount: number;
+        reviewSum: number;
+        reviewCount: number;
+      }
+    >();
+
+    const ensure = (idOrName: string, name: string) => {
+      const key = idOrName || name;
+      if (!stats.has(key)) {
+        stats.set(key, { name, done: 0, cancelled: 0, finalCount: 0, reviewSum: 0, reviewCount: 0 });
+      }
+      return stats.get(key)!;
+    };
+
+    for (const e of errands) {
+      const requesterKey = e.requesterId || e.requester;
+      const requester = ensure(requesterKey, e.requester);
+
+      if (e.status === "done" || e.status === "cancelled") requester.finalCount += 1;
+      if (e.status === "done") requester.done += 1;
+      if (e.status === "cancelled") requester.cancelled += 1;
+
+      if (e.helper) {
+        const helperKey = e.helperId || e.helper;
+        const helper = ensure(helperKey, e.helper);
+        if (e.status === "done" || e.status === "cancelled") helper.finalCount += 1;
+        if (e.status === "done") helper.done += 1;
+        if (e.status === "cancelled") helper.cancelled += 1;
+      }
+
+      for (const r of e.reviews || []) {
+        if (r.targetRole === "requester") {
+          const target = ensure(requesterKey, e.requester);
+          target.reviewSum += r.rating;
+          target.reviewCount += 1;
+        } else if (r.targetRole === "helper" && e.helper) {
+          const helperKey = e.helperId || e.helper;
+          const target = ensure(helperKey, e.helper);
+          target.reviewSum += r.rating;
+          target.reviewCount += 1;
+        }
+      }
+    }
+
+    const result = new Map<
+      string,
+      {
+        name: string;
+        temp: number;
+        face: string;
+        badge: string;
+        completionRate: number;
+        cancelRate: number;
+        avgRating: number;
+        reviewCount: number;
+        finalCount: number;
+      }
+    >();
+
+    for (const [key, s] of stats.entries()) {
+      const avgRating = s.reviewCount ? s.reviewSum / s.reviewCount : 4.3;
+      const completionRate = s.finalCount ? Math.round((s.done / s.finalCount) * 100) : 100;
+      const cancelRate = s.finalCount ? Math.round((s.cancelled / s.finalCount) * 100) : 0;
+
+      let temp = 36.5 + s.done * 0.8 - s.cancelled * 1.1 + (avgRating - 3) * 2.2;
+      temp = Math.min(99, Math.max(15, Number(temp.toFixed(1))));
+
+      const face = temp >= 42 ? "😄" : temp >= 37 ? "🙂" : temp >= 30 ? "😐" : "😟";
+      const badge =
+        s.finalCount >= 5 && completionRate >= 90 && avgRating >= 4.7
+          ? "슈퍼신뢰"
+          : s.finalCount >= 3 && completionRate >= 80 && avgRating >= 4.3
+            ? "신뢰양호"
+            : "검토필요";
+
+      result.set(key, {
+        name: s.name,
+        temp,
+        face,
+        badge,
+        completionRate,
+        cancelRate,
+        avgRating: Number(avgRating.toFixed(1)),
+        reviewCount: s.reviewCount,
+        finalCount: s.finalCount,
+      });
+    }
+
+    return result;
+  }, [errands]);
+
+  const getTrust = (id?: string, name?: string) => {
+    const key = id || name || "";
+    if (!key) return null;
+    return trustByUser.get(key) || null;
   };
 
-  const isAssignedHelper = (e: Errand) => {
-    if (!currentUser) return false;
-    return e.helperId ? e.helperId === currentUser.id : e.helper === currentUser.name;
-  };
+  const nextActionMessage = useMemo(() => {
+    if (!currentUser) {
+      return "로그인 후 동네 인증을 완료하면 바로 의뢰 등록/매칭이 가능합니다.";
+    }
+
+    if ((currentUser.role === "requester" || currentUser.role === "admin") && !isNeighborhoodVerified) {
+      return "먼저 동네 인증을 완료해주세요. 인증 후 바로 의뢰를 올릴 수 있어요.";
+    }
+
+    const myRequesterErrands = errands.filter((e) => isRequesterOwnerForUser(e, currentUser));
+    const myHelperErrands = errands.filter((e) => isAssignedHelperForUser(e, currentUser));
+
+    const needPayment = myRequesterErrands.find((e) => e.status === "open" && e.payment.status === "pending");
+    if (needPayment) {
+      return `“${needPayment.title}” 건은 결제 준비/확정이 필요합니다.`;
+    }
+
+    const needApproval = myRequesterErrands.find((e) => e.status === "in_progress" && Boolean(e.proof));
+    if (needApproval) {
+      return `“${needApproval.title}” 건은 완료 증빙 확인 후 승인하면 정산이 끝납니다.`;
+    }
+
+    const needProof = myHelperErrands.find((e) => e.status === "in_progress" && !e.proof);
+    if (needProof) {
+      return `“${needProof.title}” 건은 증빙 업로드를 완료하면 승인 대기로 넘어갑니다.`;
+    }
+
+    const matchable = errands.filter((e) => e.status === "open" && e.payment.status === "paid" && !e.helper).length;
+    if (currentUser.role === "helper" && matchable > 0) {
+      return `지금 매칭 가능한 의뢰가 ${matchable}건 있습니다.`;
+    }
+
+    if (openDisputeCount > 0 && currentUser.role === "admin") {
+      return `처리 대기 중인 분쟁이 ${openDisputeCount}건 있습니다.`;
+    }
+
+    return "진행 중인 액션은 없습니다. 새 의뢰를 등록하거나 모집중 건을 확인해보세요.";
+  }, [currentUser, errands, isNeighborhoodVerified, openDisputeCount]);
+
+  const isRequesterOwner = (e: Errand) => isRequesterOwnerForUser(e, currentUser);
+
+  const isAssignedHelper = (e: Errand) => isAssignedHelperForUser(e, currentUser);
 
   const getPaymentFlowLabel = (e: Errand) => {
-    if (e.payment.status === "paid") return "1) 결제완료 → 2) 매칭 → 3) 진행/증빙 → 4) 승인/정산";
-    if (e.payment.status === "ready") return "1) 결제창 준비됨 → 결제 확정 필요";
+    if (e.status === "cancelled") return "거래가 취소되어 결제 보관/정산이 종료되었습니다.";
+    if (e.payment.status === "paid") return "결제 보관중 → 매칭 → 수행증빙 → 승인 시 정산";
+    if (e.payment.status === "ready") return "결제창 준비됨 → 결제 확정 필요";
     if (e.payment.status === "failed") return "결제 실패 (사유 확인 후 재시도)";
     return "결제 준비 전";
+  };
+
+  const getEscrowSteps = (e: Errand) => {
+    const steps = [
+      { key: "paid", label: "결제 보관" },
+      { key: "matched", label: "매칭" },
+      { key: "progress", label: "수행중" },
+      { key: "proof", label: "증빙" },
+      { key: "settled", label: "정산완료" },
+    ] as const;
+
+    const done = {
+      paid: e.payment.status === "paid",
+      matched: ["matched", "in_progress", "done"].includes(e.status),
+      progress: ["in_progress", "done"].includes(e.status),
+      proof: Boolean(e.proof) || e.status === "done",
+      settled: Boolean(e.settlement) && e.status === "done",
+    };
+
+    return steps.map((s) => ({ ...s, done: done[s.key] }));
   };
 
   const refresh = async () => {
@@ -226,6 +431,9 @@ export default function Home() {
           apartment: json.user.apartment || prev.apartment,
         }));
       }
+      if (json.user?.neighborhoodVerifiedAt && json.user?.dong) {
+        setVerifiedDongne(json.user.dong);
+      }
     } catch {
       // 세션 없는 경우 무시
     }
@@ -236,6 +444,22 @@ export default function Home() {
     refresh();
     fetchMe();
   }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      refresh();
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (resendCooldownSec <= 0 && verifyRemainSec <= 0) return;
+    const t = window.setTimeout(() => {
+      setResendCooldownSec((v) => Math.max(0, v - 1));
+      setVerifyRemainSec((v) => Math.max(0, v - 1));
+    }, 1000);
+    return () => window.clearTimeout(t);
+  }, [resendCooldownSec, verifyRemainSec]);
 
   // 레거시 이름 로그인은 보안상 제거되었습니다.
 
@@ -248,6 +472,10 @@ export default function Home() {
       return;
     }
     setCurrentUser(null);
+    setScopeFilter("all");
+    setVerifiedDongne("");
+    setVerifiedRequestId("");
+    setVerifyRequestId("");
     setNotice({ type: "ok", text: "로그아웃 되었습니다." });
     setBusy(false);
   };
@@ -261,7 +489,7 @@ export default function Home() {
       setNotice({ type: "error", text: "제목/아파트를 모두 입력해주세요." });
       return;
     }
-    if (!verifiedRequestId) {
+    if (!isNeighborhoodVerified) {
       setNotice({ type: "error", text: "동네 인증 완료 후 의뢰를 등록할 수 있어요." });
       return;
     }
@@ -270,7 +498,7 @@ export default function Home() {
     const res = await fetch("/api/errands", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, verificationRequestId: verifiedRequestId }),
+      body: JSON.stringify({ ...form, verificationRequestId: verifiedRequestId || undefined }),
     });
 
     if (!res.ok) {
@@ -306,6 +534,17 @@ export default function Home() {
   // 완료/정산은 "증빙 업로드 → 의뢰자 승인" 흐름으로 처리합니다.
 
   const readyPayment = async (e: Errand) => {
+    const platformFee = Math.round(e.rewardKrw * 0.1);
+    const helperPayout = e.rewardKrw - platformFee;
+
+    const agreed = window.confirm(
+      `총 결제금액 ${formatKrw(e.rewardKrw)}\n` +
+        `- 수행자 수령 예정 ${formatKrw(helperPayout)}\n` +
+        `- 플랫폼 수수료 ${formatKrw(platformFee)}\n\n` +
+        `결제금은 완료 승인 전까지 안전 보관(에스크로)됩니다.\n결제 준비를 진행할까요?`,
+    );
+    if (!agreed) return;
+
     setBusy(true);
     const res = await fetch(`/api/payments/${e.id}/ready`, { method: "POST" });
     const json = await res.json();
@@ -390,15 +629,37 @@ export default function Home() {
     setBusy(false);
   };
 
-  const openDispute = async (e: Errand) => {
-    const reason = window.prompt("이의제기 사유를 입력해주세요. (최소 5자)", "");
-    if (!reason) return;
+  const openDisputeForm = (e: Errand) => {
+    setDisputeFormOpen((prev) => ({ ...prev, [e.id]: true }));
+    setDisputeDrafts((prev) => ({
+      ...prev,
+      [e.id]:
+        prev[e.id] ||
+        {
+          reasonType: "quality",
+          detail: "",
+          evidenceNote: "",
+        },
+    }));
+  };
+
+  const submitDispute = async (e: Errand) => {
+    const draft = disputeDrafts[e.id];
+    if (!draft || draft.detail.trim().length < 5) {
+      setNotice({ type: "error", text: "이의제기 상세 사유를 5자 이상 입력해주세요." });
+      return;
+    }
 
     setBusy(true);
     const res = await fetch(`/api/errands/${e.id}/dispute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({
+        reasonType: draft.reasonType,
+        detail: draft.detail.trim(),
+        evidenceNote: draft.evidenceNote.trim(),
+        reason: `[${disputeTypeLabel[draft.reasonType]}] ${draft.detail.trim()}`,
+      }),
     });
     const json = await res.json();
     if (!res.ok) {
@@ -406,7 +667,8 @@ export default function Home() {
       setBusy(false);
       return;
     }
-    setNotice({ type: "ok", text: "이의제기가 등록되었습니다." });
+    setDisputeFormOpen((prev) => ({ ...prev, [e.id]: false }));
+    setNotice({ type: "ok", text: "이의제기가 등록되었습니다. 평균 24시간 내 1차 답변을 드립니다." });
     await refresh();
     setBusy(false);
   };
@@ -431,23 +693,26 @@ export default function Home() {
     setBusy(false);
   };
 
-  const submitReview = async (e: Errand) => {
-    const ratingRaw = window.prompt("평점을 입력해주세요. (1~5)", "5");
-    if (!ratingRaw) return;
+  const openReviewForm = (e: Errand) => {
+    setReviewFormOpen((prev) => ({ ...prev, [e.id]: true }));
+    setReviewDrafts((prev) => ({
+      ...prev,
+      [e.id]: prev[e.id] || { rating: 5, comment: "" },
+    }));
+  };
 
-    const rating = Number(ratingRaw);
-    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+  const submitReview = async (e: Errand) => {
+    const draft = reviewDrafts[e.id];
+    if (!draft || !Number.isInteger(draft.rating) || draft.rating < 1 || draft.rating > 5) {
       setNotice({ type: "error", text: "평점은 1~5점 정수여야 합니다." });
       return;
     }
-
-    const comment = window.prompt("리뷰 내용을 입력해주세요. (선택)", "") || "";
 
     setBusy(true);
     const res = await fetch(`/api/errands/${e.id}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rating, comment }),
+      body: JSON.stringify({ rating: draft.rating, comment: draft.comment.trim() }),
     });
     const json = await res.json();
     if (!res.ok) {
@@ -455,6 +720,7 @@ export default function Home() {
       setBusy(false);
       return;
     }
+    setReviewFormOpen((prev) => ({ ...prev, [e.id]: false }));
     setNotice({ type: "ok", text: "리뷰가 등록되었습니다." });
     await refresh();
     setBusy(false);
@@ -496,18 +762,23 @@ export default function Home() {
     });
     const json = await res.json();
     if (!res.ok) {
+      setVerificationGuide(String(json.guide || ""));
       setNotice({ type: "error", text: json.error || "인증코드 발급 실패" });
       setBusy(false);
       return;
     }
 
     setVerifyRequestId(json.requestId);
+    const expiresAt = String(json.expiresAt || "");
+    setVerifyRemainSec(expiresAt ? Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)) : 0);
+    setResendCooldownSec(60);
+    setVerificationGuide(String(json.guide || ""));
     setDemoCode(json.demoCode || "");
     setNotice({
       type: "ok",
       text: json.demoCode
-        ? `인증코드 발급 완료 (데모코드: ${json.demoCode})`
-        : "인증코드 발급 완료. 운영모드에서는 코드가 화면에 노출되지 않습니다.",
+        ? `인증코드 발급 완료 (테스트코드: ${json.demoCode})`
+        : "인증코드 발급 완료. 등록한 휴대폰 문자에서 코드를 확인해주세요.",
     });
     setBusy(false);
   };
@@ -531,28 +802,64 @@ export default function Home() {
     }
     setVerifiedDongne(json.neighborhood || "인증완료");
     setVerifiedRequestId(verifyRequestId);
+    setResendCooldownSec(0);
+    setVerifyRemainSec(0);
+    await fetchMe();
     setNotice({ type: "ok", text: "동네 인증 완료! 이제 의뢰 등록이 가능합니다." });
     setBusy(false);
   };
 
   return (
-    <main className="max-w-[1100px] mx-auto px-4 sm:px-5 py-5 pb-16">
-      {/* 헤더 */}
-      <h1 className="text-3xl sm:text-[40px] font-extrabold tracking-tight">동네 건당 심부름</h1>
-      <p className="text-slate-500 mt-2 text-sm sm:text-base">아파트 단지 기반으로 심부름을 올리고, 건당으로 매칭하는 서비스입니다.</p>
-      {currentUser?.role === "admin" && (
-        <p className="mt-2">
-          <a href="/admin" className="text-blue-500 font-semibold hover:underline">운영 대시보드 바로가기 →</a>
-        </p>
-      )}
+    <main className="app-shell max-w-[1120px] mx-auto px-4 sm:px-6 py-6 pb-16">
+      <div className="app-bg-orb app-bg-orb-top" />
+      <div className="app-bg-orb app-bg-orb-bottom" />
+
+      <section className="hero-card">
+        <div className="hero-card__header">
+          <div>
+            <p className="hero-badge">동네 기반 안심 심부름</p>
+            <h1 className="text-3xl sm:text-[40px] font-extrabold tracking-tight text-slate-900">동네 건당 심부름</h1>
+            <p className="text-slate-600 mt-2 text-sm sm:text-base">
+              결제 보관부터 증빙·승인·분쟁까지, 소비자 보호 흐름을 기본으로 설계했습니다.
+            </p>
+          </div>
+
+          <div className="hero-sidecard">
+            <p className="text-xs font-semibold text-slate-500">지금 할 일</p>
+            <p className="text-sm text-slate-700 mt-1 leading-relaxed">{nextActionMessage}</p>
+            {currentUser?.role === "admin" && (
+              <a href="/admin" className="hero-admin-link">운영 대시보드 바로가기 →</a>
+            )}
+          </div>
+        </div>
+
+        <div className="hero-stats">
+          <div className="hero-stat">
+            <p className="hero-stat__label">총 의뢰</p>
+            <p className="hero-stat__value">{errands.length}건</p>
+          </div>
+          <div className="hero-stat">
+            <p className="hero-stat__label">완료</p>
+            <p className="hero-stat__value">{doneCount}건</p>
+          </div>
+          <div className="hero-stat">
+            <p className="hero-stat__label">정산 완료액</p>
+            <p className="hero-stat__value">{formatKrw(settledAmount)}</p>
+          </div>
+          <div className="hero-stat">
+            <p className="hero-stat__label">열린 분쟁</p>
+            <p className="hero-stat__value">{openDisputeCount}건</p>
+          </div>
+        </div>
+      </section>
 
       {/* 알림 */}
       {notice && (
         <div
-          className={`mt-3 px-3 py-2.5 rounded-xl border text-sm ${
+          className={`mt-4 px-3.5 py-3 rounded-2xl border text-sm shadow-sm ${
             notice.type === "ok"
-              ? "border-green-300 bg-green-50 text-green-800"
-              : "border-red-300 bg-red-50 text-red-800"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+              : "border-rose-300 bg-rose-50 text-rose-800"
           }`}
         >
           {notice.text}
@@ -560,8 +867,8 @@ export default function Home() {
       )}
 
       {/* 로그인 / 권한 */}
-      <section className="card mt-4">
-        <h3 className="font-bold text-base">로그인 / 권한</h3>
+      <section className="card mt-5">
+        <h3 className="section-title">로그인 / 권한</h3>
         {currentUser ? (
           <div className="mt-3">
             <p className="text-sm">
@@ -583,11 +890,12 @@ export default function Home() {
       </section>
 
       {/* 동네 인증 */}
-      <section className="card mt-4">
-        <h3 className="font-bold text-base">동네 인증</h3>
+      <section className="card mt-5">
+        <h3 className="section-title">동네 인증</h3>
         {verifiedDongne ? (
           <div className="mt-3 text-green-800 bg-green-50 rounded-lg p-3 border border-green-200">
             <p className="font-medium">인증된 동네: <b>{verifiedDongne}</b></p>
+            <p className="text-xs mt-1 text-green-700">주소 변경이나 인증 만료 시 아래에서 재발급 후 재인증할 수 있어요.</p>
           </div>
         ) : (
           <p className="mt-2 text-slate-500 text-sm">회원가입 시 등록한 주소지(아파트/동) 기준으로 인증코드를 발급해 동네를 인증하세요.</p>
@@ -630,22 +938,38 @@ export default function Home() {
         )}
 
         {/* Step 2: 인증코드 발급 */}
-        {!verifiedDongne && (
-          <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-            <p className="text-sm text-slate-600 mb-2">
-              가입 주소지: <b>{currentUser?.apartment || "(로그인 필요)"}</b> / {currentUser?.dong || "-"}
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <button disabled={busy || !currentUser} onClick={issueNeighborhoodCode} className="btn-primary">
-                {busy ? "발급중..." : "인증코드 발급"}
-              </button>
-              {demoCode && <span className="text-slate-600 text-sm">데모코드: <b>{demoCode}</b></span>}
-            </div>
+        <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+          <p className="text-sm text-slate-600 mb-2">
+            가입 주소지: <b>{currentUser?.apartment || "(로그인 필요)"}</b> / {currentUser?.dong || "-"}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              disabled={busy || !currentUser || resendCooldownSec > 0}
+              onClick={issueNeighborhoodCode}
+              className="btn-primary"
+            >
+              {busy
+                ? "발급중..."
+                : resendCooldownSec > 0
+                  ? `재발급 대기 ${resendCooldownSec}s`
+                  : verifiedDongne
+                    ? "인증코드 재발급"
+                    : "인증코드 발급"}
+            </button>
+            {demoCode && <span className="text-slate-600 text-sm">테스트코드: <b>{demoCode}</b></span>}
           </div>
-        )}
+          {verifyRequestId && (
+            <p className="text-xs text-slate-500 mt-2">
+              코드 유효시간: {verifyRemainSec > 0 ? `${Math.floor(verifyRemainSec / 60)}분 ${verifyRemainSec % 60}초` : "만료됨"}
+            </p>
+          )}
+          <p className="text-xs text-slate-500 mt-1">
+            {verificationGuide || "문자가 안 오면 스팸함 확인 후 60초 뒤 재발급해주세요."}
+          </p>
+        </div>
 
         {/* Step 3: 인증코드 입력 */}
-        {verifyRequestId && !verifiedDongne && (
+        {verifyRequestId && (
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2.5 mt-3">
             <input
               placeholder="인증코드 6자리 입력"
@@ -663,8 +987,8 @@ export default function Home() {
       </section>
 
       {/* 네이버 지도 */}
-      <section className="card mt-4">
-        <h3 className="font-bold text-base">네이버 지도</h3>
+      <section className="card mt-5">
+        <h3 className="section-title">네이버 지도</h3>
         <p className="mt-2 text-slate-500 text-sm">선택한 주소를 지도에서 확인할 수 있어요.</p>
         <div className="mt-3">
           <NaverMap queryAddress={mapQuery} />
@@ -674,16 +998,17 @@ export default function Home() {
       {/* 운영 요약 & 신뢰 규칙 */}
       <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
         <div className="card">
-          <h3 className="font-bold text-base">운영 요약</h3>
+          <h3 className="section-title">운영 요약</h3>
           <ul className="mt-3 space-y-1.5 text-sm ml-4 list-disc text-slate-700">
             <li>총 의뢰: <b>{errands.length}건</b></li>
             <li>모집중: <b>{openCount}건</b></li>
-            <li>완료: <b>{errands.filter((e) => e.status === "done").length}건</b></li>
+            <li>완료: <b>{doneCount}건</b></li>
+            <li>열린 분쟁: <b>{openDisputeCount}건</b></li>
             <li>패널티 누적: <b>{formatKrw(totalPenalty)}</b></li>
           </ul>
         </div>
         <div className="card">
-          <h3 className="font-bold text-base">신뢰 규칙(초안)</h3>
+          <h3 className="section-title">신뢰 규칙(초안)</h3>
           <ul className="mt-3 space-y-1.5 text-sm ml-4 list-disc text-slate-700">
             <li>건당 보상금 사전 표시 (3,000~100,000원)</li>
             <li>매칭 후 취소 최대 2,000원 패널티</li>
@@ -693,9 +1018,20 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="card mt-5">
+        <h3 className="section-title">안전 거래 체크리스트 (타플랫폼 베스트프랙티스 반영)</h3>
+        <ul className="mt-3 space-y-1.5 text-sm ml-4 list-disc text-slate-700">
+          <li>결제금은 작업 완료 승인 전까지 보관(에스크로)됩니다.</li>
+          <li>매너온도·리뷰·완료율을 확인한 뒤 매칭하세요.</li>
+          <li>완료 전에는 꼭 증빙(사진/메모)을 확인하세요.</li>
+          <li>문제 발생 시 이의제기 등록 후 평균 24시간 내 1차 안내를 받습니다.</li>
+          <li>비매너/사기 의심 사용자는 즉시 신고·차단하세요.</li>
+        </ul>
+      </section>
+
       {/* 심부름 의뢰 등록 */}
-      <section className="card mt-4">
-        <h3 className="font-bold text-base">심부름 의뢰 등록</h3>
+      <section className="card mt-5">
+        <h3 className="section-title">심부름 의뢰 등록</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
           <input placeholder="제목 (예: 편의점 다녀와주세요)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="input-field" maxLength={80} />
           <input
@@ -765,17 +1101,18 @@ export default function Home() {
           </p>
         )}
         <button
-          disabled={busy || !verifiedRequestId}
+          disabled={busy || !isNeighborhoodVerified}
           onClick={createErrand}
-          className={`btn-primary w-full mt-3 ${!verifiedRequestId ? "opacity-60 cursor-not-allowed" : ""}`}
+          className={`btn-primary w-full mt-3 ${!isNeighborhoodVerified ? "opacity-60 cursor-not-allowed" : ""}`}
         >
-          {busy ? "등록중..." : verifiedRequestId ? "의뢰 등록" : "동네 인증 후 의뢰 등록 가능"}
+          {busy ? "등록중..." : isNeighborhoodVerified ? "의뢰 등록" : "동네 인증 후 의뢰 등록 가능"}
         </button>
       </section>
 
       {/* 의뢰 목록 */}
-      <section className="card mt-4">
-        <h3 className="font-bold text-base">의뢰 목록</h3>
+      <section className="card mt-5">
+        <h3 className="section-title">의뢰 목록</h3>
+        <p className="text-xs text-slate-500 mt-1">상태는 15초마다 자동 갱신됩니다.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-3">
           <input
             placeholder="제목/아파트/의뢰자 검색"
@@ -810,6 +1147,24 @@ export default function Home() {
           ))}
         </div>
 
+        {currentUser && (
+          <div className="flex gap-2 mt-2 flex-wrap">
+            {[
+              { key: "all", label: "전체 보기" },
+              { key: "mine_requester", label: "내 의뢰" },
+              { key: "mine_helper", label: "내 수행" },
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setScopeFilter(item.key as "all" | "mine_requester" | "mine_helper")}
+                className={`chip-button ${scopeFilter === item.key ? "chip-button--active" : ""}`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="grid gap-3 mt-4">
           {filteredErrands.length === 0 && <p className="text-slate-500 text-sm py-4 text-center">조건에 맞는 의뢰가 없습니다.</p>}
           {filteredErrands.map((e) => {
@@ -826,7 +1181,7 @@ export default function Home() {
             const canReview = e.status === "done" && (mineAsRequester || mineAsHelper || isAdminUser);
 
             return (
-              <div key={e.id} className="border border-slate-200 rounded-xl p-3 sm:p-4 bg-white">
+              <div key={e.id} className="errand-card">
                 <div className="flex justify-between items-start gap-2">
                   <b className="text-sm sm:text-base leading-snug">{e.title}</b>
                   <span className={`shrink-0 text-xs px-2.5 py-0.5 rounded-full border font-medium ${statusColor[e.status]}`}>
@@ -848,6 +1203,57 @@ export default function Home() {
                 <p className="text-slate-600 mt-1 text-xs">
                   결제: <b>{paymentMethodLabel[e.payment.method]}</b> · <b>{paymentStatusLabel[e.payment.status]}</b>
                 </p>
+
+                <div className="mt-2 grid gap-2 sm:grid-cols-2 text-xs">
+                  {(() => {
+                    const requesterTrust = getTrust(e.requesterId, e.requester);
+                    const helperTrust = e.helper ? getTrust(e.helperId, e.helper) : null;
+                    return (
+                      <>
+                        {requesterTrust && (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                            <p className="font-semibold">의뢰자 신뢰 {requesterTrust.face} {requesterTrust.temp}°</p>
+                            <p className="text-slate-600 mt-1">
+                              {requesterTrust.badge} · 완료율 {requesterTrust.completionRate}% · 리뷰 {requesterTrust.avgRating} ({requesterTrust.reviewCount})
+                            </p>
+                          </div>
+                        )}
+                        {helperTrust ? (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                            <p className="font-semibold">수행자 신뢰 {helperTrust.face} {helperTrust.temp}°</p>
+                            <p className="text-slate-600 mt-1">
+                              {helperTrust.badge} · 완료율 {helperTrust.completionRate}% · 리뷰 {helperTrust.avgRating} ({helperTrust.reviewCount})
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-slate-600">
+                            수행자 미정 (매칭 전)
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+
+                <div className="mt-2 p-2.5 rounded-lg border border-blue-100 bg-blue-50">
+                  <p className="text-xs text-blue-800">결제 보관(에스크로) 진행 상태</p>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {getEscrowSteps(e).map((step) => (
+                      <span
+                        key={step.key}
+                        className={`text-[11px] px-2 py-1 rounded-full border ${
+                          step.done
+                            ? "bg-blue-600 border-blue-600 text-white"
+                            : "bg-white border-blue-200 text-blue-700"
+                        }`}
+                      >
+                        {step.done ? "✓ " : "○ "}
+                        {step.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
                 <p className="text-xs text-blue-700 mt-1">다음 단계: {getPaymentFlowLabel(e)}</p>
 
                 {e.payment.failedReason && (
@@ -886,9 +1292,15 @@ export default function Home() {
                 {e.dispute && (
                   <div className="mt-2 p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-800">
                     <p>
-                      이의제기: {e.dispute.status === "open" ? "진행중" : "해결됨"} / {e.dispute.reason}
+                      이의제기: {e.dispute.status === "open" ? "진행중" : "해결됨"}
+                      {e.dispute.reasonType ? ` / ${disputeTypeLabel[e.dispute.reasonType as keyof typeof disputeTypeLabel]}` : ""}
                     </p>
+                    <p className="text-xs mt-1">사유: {e.dispute.reason}</p>
+                    {e.dispute.evidenceNote && <p className="text-xs mt-1">증빙 메모: {e.dispute.evidenceNote}</p>}
                     <p className="text-xs mt-1">등록자: {e.dispute.reporterName}</p>
+                    {e.dispute.status === "open" && (
+                      <p className="text-xs mt-1">처리예상: 약 {e.dispute.expectedResolutionHours || 24}시간 내 1차 안내</p>
+                    )}
                     {e.dispute.status === "resolved" && (
                       <p className="text-xs mt-1">
                         해결: {e.dispute.resolutionStatus || "-"} / {e.dispute.resolutionNote || "메모 없음"}
@@ -939,6 +1351,109 @@ export default function Home() {
                   </div>
                 )}
 
+                {disputeFormOpen[e.id] && canOpenDispute && e.dispute?.status !== "open" && e.status !== "done" && (
+                  <div className="mt-3 p-2.5 rounded-lg border border-rose-200 bg-rose-50">
+                    <p className="text-xs text-rose-700 mb-2">이의제기 작성 (평균 24시간 내 1차 안내)</p>
+                    <select
+                      value={disputeDrafts[e.id]?.reasonType || "quality"}
+                      onChange={(ev) =>
+                        setDisputeDrafts((prev) => ({
+                          ...prev,
+                          [e.id]: {
+                            reasonType: ev.target.value as "no_show" | "quality" | "fake_proof" | "amount" | "etc",
+                            detail: prev[e.id]?.detail || "",
+                            evidenceNote: prev[e.id]?.evidenceNote || "",
+                          },
+                        }))
+                      }
+                      className="input-field text-sm"
+                    >
+                      {Object.entries(disputeTypeLabel).map(([k, v]) => (
+                        <option key={k} value={k}>{v}</option>
+                      ))}
+                    </select>
+                    <textarea
+                      className="input-field text-sm mt-2 w-full min-h-[72px]"
+                      placeholder="상세 사유를 입력해주세요 (최소 5자)"
+                      value={disputeDrafts[e.id]?.detail || ""}
+                      onChange={(ev) =>
+                        setDisputeDrafts((prev) => ({
+                          ...prev,
+                          [e.id]: {
+                            reasonType: prev[e.id]?.reasonType || "quality",
+                            detail: ev.target.value,
+                            evidenceNote: prev[e.id]?.evidenceNote || "",
+                          },
+                        }))
+                      }
+                    />
+                    <input
+                      className="input-field text-sm mt-2"
+                      placeholder="증빙 메모(선택): 사진/영수증/채팅 캡처 등"
+                      value={disputeDrafts[e.id]?.evidenceNote || ""}
+                      onChange={(ev) =>
+                        setDisputeDrafts((prev) => ({
+                          ...prev,
+                          [e.id]: {
+                            reasonType: prev[e.id]?.reasonType || "quality",
+                            detail: prev[e.id]?.detail || "",
+                            evidenceNote: ev.target.value,
+                          },
+                        }))
+                      }
+                    />
+                    <div className="mt-2 flex gap-2">
+                      <button disabled={busy} onClick={() => submitDispute(e)} className="btn-danger text-sm">이의제기 제출</button>
+                      <button disabled={busy} onClick={() => setDisputeFormOpen((prev) => ({ ...prev, [e.id]: false }))} className="btn-secondary text-sm">닫기</button>
+                    </div>
+                  </div>
+                )}
+
+                {reviewFormOpen[e.id] && canReview && (
+                  <div className="mt-3 p-2.5 rounded-lg border border-indigo-200 bg-indigo-50">
+                    <p className="text-xs text-indigo-700 mb-2">거래 리뷰 작성</p>
+                    <div className="grid grid-cols-[140px_1fr] gap-2">
+                      <select
+                        value={reviewDrafts[e.id]?.rating || 5}
+                        onChange={(ev) =>
+                          setReviewDrafts((prev) => ({
+                            ...prev,
+                            [e.id]: {
+                              rating: Number(ev.target.value),
+                              comment: prev[e.id]?.comment || "",
+                            },
+                          }))
+                        }
+                        className="input-field text-sm"
+                      >
+                        <option value={5}>5점</option>
+                        <option value={4}>4점</option>
+                        <option value={3}>3점</option>
+                        <option value={2}>2점</option>
+                        <option value={1}>1점</option>
+                      </select>
+                      <input
+                        className="input-field text-sm"
+                        placeholder="코멘트(선택)"
+                        value={reviewDrafts[e.id]?.comment || ""}
+                        onChange={(ev) =>
+                          setReviewDrafts((prev) => ({
+                            ...prev,
+                            [e.id]: {
+                              rating: prev[e.id]?.rating || 5,
+                              comment: ev.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button disabled={busy} onClick={() => submitReview(e)} className="btn-secondary text-sm">리뷰 제출</button>
+                      <button disabled={busy} onClick={() => setReviewFormOpen((prev) => ({ ...prev, [e.id]: false }))} className="btn-secondary text-sm">닫기</button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-2 mt-3 flex-wrap">
                   {canPay && e.payment.status === "pending" && (
                     <button disabled={busy} onClick={() => readyPayment(e)} className="btn-secondary text-sm">결제 준비</button>
@@ -972,11 +1487,17 @@ export default function Home() {
                   )}
 
                   {canOpenDispute && e.dispute?.status !== "open" && e.status !== "done" && (
-                    <button disabled={busy} onClick={() => openDispute(e)} className="btn-danger text-sm">이의제기</button>
+                    <button
+                      disabled={busy}
+                      onClick={() => openDisputeForm(e)}
+                      className="btn-danger text-sm"
+                    >
+                      이의제기 작성
+                    </button>
                   )}
 
                   {canReview && (
-                    <button disabled={busy} onClick={() => submitReview(e)} className="btn-secondary text-sm">리뷰 작성</button>
+                    <button disabled={busy} onClick={() => openReviewForm(e)} className="btn-secondary text-sm">리뷰 작성</button>
                   )}
 
                   {e.status !== "done" && e.status !== "cancelled" && (mineAsRequester || mineAsHelper || isAdminUser) && (
@@ -1000,77 +1521,267 @@ export default function Home() {
       </section>
 
       <style jsx global>{`
-        .card {
-          background: rgba(255, 255, 255, 0.76);
-          border: 1px solid rgba(255, 255, 255, 0.85);
-          border-radius: 16px;
-          padding: 14px 16px;
-          box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
-          backdrop-filter: blur(14px);
+        .app-shell {
+          position: relative;
+          isolation: isolate;
         }
+
+        .app-bg-orb {
+          position: absolute;
+          z-index: -1;
+          width: 340px;
+          height: 340px;
+          border-radius: 999px;
+          filter: blur(70px);
+          opacity: 0.35;
+          pointer-events: none;
+        }
+
+        .app-bg-orb-top {
+          top: -80px;
+          right: -100px;
+          background: radial-gradient(circle at 30% 30%, #7dd3fc, #3b82f6 60%, #2563eb 100%);
+        }
+
+        .app-bg-orb-bottom {
+          bottom: 120px;
+          left: -120px;
+          background: radial-gradient(circle at 30% 30%, #c4b5fd, #818cf8 60%, #6366f1 100%);
+        }
+
+        .hero-card {
+          border-radius: 24px;
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          background: linear-gradient(135deg, #ffffff 0%, #eff6ff 55%, #eef2ff 100%);
+          box-shadow: 0 24px 50px rgba(15, 23, 42, 0.1);
+          padding: 20px;
+        }
+
+        .hero-card__header {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 14px;
+        }
+
+        .hero-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 12px;
+          font-weight: 700;
+          color: #1e3a8a;
+          background: #dbeafe;
+          border: 1px solid #bfdbfe;
+          border-radius: 999px;
+          padding: 5px 10px;
+          margin-bottom: 10px;
+          width: fit-content;
+        }
+
+        .hero-sidecard {
+          background: rgba(255, 255, 255, 0.76);
+          border: 1px solid rgba(148, 163, 184, 0.25);
+          border-radius: 16px;
+          padding: 12px;
+          backdrop-filter: blur(8px);
+        }
+
+        .hero-admin-link {
+          display: inline-flex;
+          margin-top: 10px;
+          color: #1d4ed8;
+          font-size: 13px;
+          font-weight: 700;
+          text-decoration: none;
+        }
+
+        .hero-admin-link:hover {
+          text-decoration: underline;
+        }
+
+        .hero-stats {
+          margin-top: 14px;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .hero-stat {
+          background: rgba(255, 255, 255, 0.78);
+          border: 1px solid rgba(148, 163, 184, 0.25);
+          border-radius: 14px;
+          padding: 10px 12px;
+        }
+
+        .hero-stat__label {
+          font-size: 11px;
+          color: #64748b;
+          margin-bottom: 4px;
+          font-weight: 600;
+        }
+
+        .hero-stat__value {
+          font-size: 16px;
+          font-weight: 800;
+          color: #0f172a;
+        }
+
+        .card {
+          background: rgba(255, 255, 255, 0.86);
+          border: 1px solid rgba(226, 232, 240, 0.95);
+          border-radius: 20px;
+          padding: 16px;
+          box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
+          backdrop-filter: blur(12px);
+        }
+
+        .section-title {
+          font-size: 16px;
+          line-height: 1.4;
+          font-weight: 800;
+          color: #0f172a;
+          letter-spacing: -0.01em;
+        }
+
         .input-field {
           border: 1px solid #cbd5e1;
-          border-radius: 10px;
-          padding: 9px 12px;
-          background: #fff;
+          border-radius: 12px;
+          padding: 10px 12px;
+          background: rgba(255, 255, 255, 0.96);
           font-size: 14px;
           outline: none;
-          transition: border-color 0.15s;
+          transition: border-color 0.15s, box-shadow 0.15s;
+          min-height: 42px;
         }
+
         .input-field:focus {
           border-color: #3b82f6;
-          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
         }
+
+        .input-field:disabled {
+          background: #f8fafc;
+          color: #64748b;
+        }
+
         .btn-primary {
           border: none;
-          background: #2563eb;
+          background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
           color: #fff;
-          border-radius: 10px;
-          padding: 9px 16px;
+          border-radius: 12px;
+          padding: 10px 16px;
           cursor: pointer;
-          font-weight: 600;
+          font-weight: 700;
           font-size: 14px;
-          transition: background 0.15s;
+          transition: transform 0.12s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+          box-shadow: 0 8px 18px rgba(37, 99, 235, 0.22);
         }
+
         .btn-primary:hover:not(:disabled) {
-          background: #1d4ed8;
+          transform: translateY(-1px);
+          box-shadow: 0 12px 22px rgba(37, 99, 235, 0.28);
         }
+
         .btn-primary:disabled {
           cursor: not-allowed;
+          opacity: 0.62;
+          box-shadow: none;
         }
+
         .btn-secondary {
           border: 1px solid #cbd5e1;
-          background: #f8fafc;
-          border-radius: 8px;
-          padding: 7px 12px;
+          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+          border-radius: 12px;
+          padding: 8px 12px;
           cursor: pointer;
           font-size: 14px;
-          transition: background 0.15s, border-color 0.15s;
+          font-weight: 600;
+          transition: border-color 0.15s, background 0.15s, transform 0.1s;
         }
+
         .btn-secondary:hover:not(:disabled) {
           background: #f1f5f9;
           border-color: #94a3b8;
+          transform: translateY(-1px);
         }
+
         .btn-secondary:disabled {
           opacity: 0.5;
           cursor: not-allowed;
+          transform: none;
         }
+
         .btn-danger {
-          border: 1px solid #fca5a5;
-          background: #fef2f2;
-          color: #b91c1c;
-          border-radius: 8px;
-          padding: 7px 12px;
+          border: 1px solid #fda4af;
+          background: #fff1f2;
+          color: #be123c;
+          border-radius: 12px;
+          padding: 8px 12px;
           cursor: pointer;
           font-size: 14px;
-          transition: background 0.15s;
+          font-weight: 600;
+          transition: background 0.15s, transform 0.1s;
         }
+
         .btn-danger:hover:not(:disabled) {
-          background: #fee2e2;
+          background: #ffe4e6;
+          transform: translateY(-1px);
         }
+
         .btn-danger:disabled {
           opacity: 0.5;
           cursor: not-allowed;
+          transform: none;
+        }
+
+        .chip-button {
+          border: 1px solid #cbd5e1;
+          border-radius: 999px;
+          padding: 6px 12px;
+          font-size: 12px;
+          font-weight: 600;
+          background: #fff;
+          color: #475569;
+          transition: all 0.15s ease;
+        }
+
+        .chip-button:hover {
+          border-color: #93c5fd;
+          color: #1d4ed8;
+        }
+
+        .chip-button--active {
+          border-color: #93c5fd;
+          background: #eff6ff;
+          color: #1d4ed8;
+        }
+
+        .errand-card {
+          border: 1px solid #e2e8f0;
+          border-radius: 18px;
+          padding: 14px;
+          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+          box-shadow: 0 8px 16px rgba(15, 23, 42, 0.04);
+        }
+
+        @media (min-width: 760px) {
+          .hero-card {
+            padding: 24px;
+          }
+
+          .hero-card__header {
+            grid-template-columns: 1fr minmax(260px, 320px);
+            align-items: flex-start;
+            gap: 16px;
+          }
+
+          .hero-stats {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+          }
+
+          .errand-card {
+            padding: 16px;
+          }
         }
       `}</style>
     </main>

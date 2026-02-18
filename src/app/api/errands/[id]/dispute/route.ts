@@ -81,7 +81,20 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ ok: true, errand: db.errands[idx] });
   }
 
-  const reason = String(body?.reason || "").trim();
+  const reasonTypeRaw = String(body?.reasonType || "etc").trim();
+  const reasonType =
+    reasonTypeRaw === "no_show" ||
+    reasonTypeRaw === "quality" ||
+    reasonTypeRaw === "fake_proof" ||
+    reasonTypeRaw === "amount" ||
+    reasonTypeRaw === "etc"
+      ? reasonTypeRaw
+      : "etc";
+
+  const detail = String(body?.detail || "").trim();
+  const evidenceNote = String(body?.evidenceNote || "").trim();
+  const reason = String(body?.reason || detail || "").trim();
+
   if (!reason || reason.length < 5) {
     return NextResponse.json({ error: "이의제기 사유를 5자 이상 입력해주세요." }, { status: 400 });
   }
@@ -95,6 +108,10 @@ export async function POST(req: NextRequest, { params }: Params) {
     dispute: {
       status: "open",
       reason,
+      reasonType,
+      detail: detail || undefined,
+      evidenceNote: evidenceNote || undefined,
+      expectedResolutionHours: 24,
       reporterId: user.id,
       reporterName: user.name,
       createdAt: new Date().toISOString(),

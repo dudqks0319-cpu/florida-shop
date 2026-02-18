@@ -33,6 +33,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const allowDemoCode = process.env.ALLOW_DEMO_CODE === "true";
+    const smsConfigured = Boolean(process.env.SMS_API_KEY && process.env.SMS_API_SECRET && process.env.SMS_FROM_NUMBER);
+    const localDevFallback = process.env.NODE_ENV !== "production" && !smsConfigured;
+
+    if (!allowDemoCode && !smsConfigured && !localDevFallback) {
+      return NextResponse.json(
+        {
+          error: "현재 SMS 인증 발송 설정이 준비되지 않았습니다. 잠시 후 다시 시도하거나 운영자에게 문의해주세요.",
+          guide:
+            "운영 환경에서는 SMS 연동이 필요합니다. 테스트 환경이라면 ALLOW_DEMO_CODE=true로 임시 데모 코드를 사용할 수 있습니다.",
+        },
+        { status: 503 },
+      );
+    }
+
     const db = await readDB();
     const requestId = makeId();
     const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -53,16 +68,22 @@ export async function POST(req: NextRequest) {
 
     await writeDB(db);
 
-    const allowDemoCode = process.env.ALLOW_DEMO_CODE === "true";
+    const useVisibleCode = allowDemoCode || localDevFallback;
+    const deliveryMethod = useVisibleCode ? "demo" : "sms";
 
     return NextResponse.json({
       requestId,
       apartment: currentUser.apartment,
       dong: currentUser.dong,
-      message: allowDemoCode
-        ? "인증코드가 발급되었습니다. (데모 모드: 코드가 응답에 포함됩니다)"
-        : "인증코드가 발급되었습니다. 운영 모드에서는 코드가 응답에 노출되지 않습니다.",
-      ...(allowDemoCode ? { demoCode: code } : {}),
+      deliveryMethod,
+      message: useVisibleCode
+        ? localDevFallback
+          ? "SMS 설정이 없어 로컬 개발용 데모코드를 표시합니다. 운영 배포 전에는 반드시 SMS 연동이 필요합니다."
+          : "인증코드가 발급되었습니다. (데모 모드: 코드가 응답에 포함됩니다)"
+        : "인증코드가 발급되었습니다. 등록된 휴대폰 문자 메시지를 확인해주세요.",
+      guide:
+        "문자가 오지 않으면 1) 스팸함 확인 2) 60초 후 재발급 3) 계속 실패 시 고객센터 문의하기",
+      ...(useVisibleCode ? { demoCode: code } : {}),
       expiresAt,
     });
   } catch (error) {
