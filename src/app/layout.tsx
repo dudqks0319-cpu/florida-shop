@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "동네 심부름 - 아파트 단지 기반 심부름 매칭",
-  description: "같은 아파트 단지 이웃끼리 편의점, 배달, 은행 등 건당 심부름을 올리고 매칭하는 서비스입니다.",
+  title: "FLORIDA SHOP - 플로리다 쇼핑몰",
+  description: "FLORIDA 쇼핑몰 홈, 카테고리, 상품상세, 장바구니, 결제 흐름을 제공하는 전용 웹서비스입니다.",
 };
 
 export default function RootLayout({

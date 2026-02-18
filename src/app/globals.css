@@ -48,3 +48,27 @@ body {
 }
 .animate-fade-in { animation: fade-in 0.3s ease-out; }
 
+@media (min-width: 1024px) {
+  .florida-desktop-shell {
+    min-height: 100dvh;
+    padding: 20px;
+    background: radial-gradient(circle at top right, #fff4ef 0%, #f8fafc 42%, #eef2f6 100%);
+  }
+
+  .florida-desktop-shell .max-w-md {
+    max-width: min(1200px, calc(100vw - 40px)) !important;
+    border-radius: 24px;
+    overflow: hidden;
+  }
+
+  .florida-desktop-shell .grid.grid-cols-2 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .florida-desktop-shell .fixed.bottom-0 {
+    max-width: min(1200px, calc(100vw - 40px));
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 16px 16px 0 0;
+  }
+}
