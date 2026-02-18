@@ -95,7 +95,16 @@ export default function FloridaCheckoutPage() {
     const ready = await fetch("/api/florida/payment/ready", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ method, amount: total, orderName: `${buyerName}님의 주문` }),
+      body: JSON.stringify({
+        method,
+        amount: total,
+        orderName: `${buyerName}님의 주문`,
+        agreements: {
+          terms: agreeTerms,
+          privacy: agreePrivacy,
+          age14: agreeAge,
+        },
+      }),
     });
     const readyJson = await ready.json();
     if (!ready.ok) {
@@ -123,6 +132,14 @@ export default function FloridaCheckoutPage() {
       deliveryRequest,
       createdAt: new Date().toISOString(),
       status: "배송준비",
+      agreements: {
+        terms: true,
+        privacy: true,
+        age14: true,
+        agreedAt: readyJson?.agreementReceipt?.agreedAt ?? new Date().toISOString(),
+        termsVersion: readyJson?.agreementReceipt?.termsVersion ?? "terms-v1",
+        privacyVersion: readyJson?.agreementReceipt?.privacyVersion ?? "privacy-v1",
+      },
     }));
 
     addOrders(orders);

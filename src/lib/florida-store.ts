@@ -19,6 +19,14 @@ export type FloridaOrder = {
   deliveryRequest?: string;
   createdAt: string;
   status: FloridaOrderStatus;
+  agreements?: {
+    terms: boolean;
+    privacy: boolean;
+    age14: boolean;
+    agreedAt: string;
+    termsVersion: string;
+    privacyVersion: string;
+  };
   claimType?: "refund" | "exchange";
   claimReason?: string;
   claimStatus?: "요청접수" | "처리중" | "완료" | "반려";
