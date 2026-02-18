@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { FLORIDA_PRODUCTS } from "@/lib/florida-products";
 
-const HOT = ["린넨 셔츠", "와이드 팬츠", "캔버스 백", "볼캡", "카고팬츠", "니트"];
-const ALL = ["린넨 셔츠", "린넨 바지", "와이드 팬츠", "캔버스 백", "크로스백", "후드집업"];
+const HOT = ["카고", "볼캡", "숄더백", "니트", "후드집업", "자켓"];
 
 export default function SearchModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [q, setQ] = useState("");
@@ -15,6 +15,11 @@ export default function SearchModal({ isOpen, onClose }: { isOpen: boolean; onCl
   });
   const router = useRouter();
 
+  const allKeywords = useMemo(() => {
+    const productKeywords = FLORIDA_PRODUCTS.flatMap((p) => [p.name, p.desc, p.category]);
+    return [...new Set([...HOT, ...productKeywords])];
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
     document.body.style.overflow = "hidden";
@@ -24,7 +29,7 @@ export default function SearchModal({ isOpen, onClose }: { isOpen: boolean; onCl
   }, [isOpen]);
 
   if (!isOpen) return null;
-  const suggestions = q ? ALL.filter((k) => k.toLowerCase().includes(q.toLowerCase())) : [];
+  const suggestions = q ? allKeywords.filter((k) => k.toLowerCase().includes(q.toLowerCase())).slice(0, 12) : [];
 
   const go = (keyword: string) => {
     if (!keyword.trim()) return;

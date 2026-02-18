@@ -7,8 +7,8 @@ const navItems = [
   { href: "/florida", label: "홈" },
   { href: "/florida/all", label: "카테고리" },
   { href: "/florida/welcome", label: "혜택" },
-  { href: "/florida/mypage", label: "찜" },
-  { href: "/florida/mypage", label: "마이페이지" },
+  { href: "/florida/cart", label: "장바구니" },
+  { href: "/florida/mypage", label: "마이" },
 ];
 
 export default function BottomNav() {

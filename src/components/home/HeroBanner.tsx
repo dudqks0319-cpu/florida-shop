@@ -1,6 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
+import Link from "next/link";
+
 type HeroBannerProps = {
   image?: string;
 };
@@ -15,7 +17,9 @@ export default function HeroBanner({ image }: HeroBannerProps) {
       <p className="text-xs opacity-90">FLORIDA WEEK</p>
       <h2 className="text-3xl font-black mt-2">최대 60% 특가</h2>
       <p className="text-sm mt-1 opacity-95">경쟁사 인기템 가격대 맞춤 큐레이션</p>
-      <button className="mt-4 bg-white/20 rounded-full px-4 py-2 text-sm">지금 쇼핑하기</button>
+      <Link href="/florida/all" className="mt-4 inline-flex bg-white/20 rounded-full px-4 py-2 text-sm font-semibold">
+        지금 쇼핑하기
+      </Link>
     </div>
   );
 }

@@ -31,6 +31,7 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 - API 발급/보안 저장 가이드: `API_SETUP_GUIDE.md`
 - API 키 실제 입력 순서 체크리스트: `API_KEY_INPUT_CHECKLIST.md`
 - 최신 개선 진행현황: `IMPLEMENTATION_STATUS_2026-02-18.md`
+- FLORIDA 홈 보완 진단/결과: `FLORIDA_HOMEPAGE_COMPLETION_2026-02-18.md`
 
 ## 결제 연동(한국 결제수단)
 
