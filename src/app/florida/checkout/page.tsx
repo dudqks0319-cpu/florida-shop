@@ -30,7 +30,9 @@ export default function FloridaCheckoutPage() {
   const [method, setMethod] = useState<"kakaopay" | "naverpay" | "tosspay" | "card">("kakaopay");
   const [payMode, setPayMode] = useState<"mock" | "live">("mock");
   const [methodReady, setMethodReady] = useState<Record<string, boolean>>({});
-  const [agree, setAgree] = useState(false);
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreePrivacy, setAgreePrivacy] = useState(false);
+  const [agreeAge, setAgreeAge] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -82,7 +84,9 @@ export default function FloridaCheckoutPage() {
     if (!buyerName.trim()) return setNotice("주문자 이름을 입력해주세요.");
     if (!receiverPhone.trim()) return setNotice("연락처를 입력해주세요.");
     if (!selectedAddr) return setNotice("도로명 주소를 선택해주세요.");
-    if (!agree) return setNotice("약관 동의가 필요합니다.");
+    if (!agreeTerms || !agreePrivacy || !agreeAge) {
+      return setNotice("필수 약관(이용약관/개인정보/연령확인) 동의가 필요합니다.");
+    }
     if (payMode === "live" && !methodReady[method]) {
       return setNotice(`선택한 결제수단(${method})의 라이브 키 설정이 필요합니다.`);
     }
@@ -180,7 +184,25 @@ export default function FloridaCheckoutPage() {
         <div className="flex justify-between mt-1"><span>배송비</span><b>{shippingFee.toLocaleString("ko-KR")}원</b></div>
         <div className="flex justify-between mt-1"><span>쿠폰할인</span><b>-{couponDiscount.toLocaleString("ko-KR")}원</b></div>
         <div className="flex justify-between mt-2 text-lg"><span>최종 결제금액</span><b>{total.toLocaleString("ko-KR")}원</b></div>
-        <label className="mt-3 flex items-center gap-2"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> 주문 정보 및 결제에 동의합니다.</label>
+
+        <div className="mt-3 space-y-2 text-xs text-slate-700">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={agreeTerms} onChange={(e) => setAgreeTerms(e.target.checked)} />
+            <span>
+              [필수] <Link href="/florida/policy/terms" className="underline">이용약관</Link> 동의
+            </span>
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} />
+            <span>
+              [필수] <Link href="/florida/policy/privacy" className="underline">개인정보 수집·이용</Link> 동의
+            </span>
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={agreeAge} onChange={(e) => setAgreeAge(e.target.checked)} />
+            <span>[필수] 만 14세 이상입니다.</span>
+          </label>
+        </div>
       </section>
 
       <button onClick={checkout} disabled={busy} className="mt-3 w-full rounded-xl bg-blue-600 text-white py-3 font-semibold disabled:opacity-60">

@@ -3,6 +3,13 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { FLORIDA_PRODUCTS, type FloridaCategory } from "@/lib/florida-products";
+import {
+  filterAndSortProducts,
+  getProductRating,
+  getTopPicks,
+  toCatalogQueryString,
+  type SortKey,
+} from "@/lib/florida-catalog";
 import { getCart, getWish, pushRecent, setCart, setWish } from "@/lib/florida-store";
 import { getBannerImage, getImageOverrides } from "@/lib/florida-admin";
 import ProductCard from "@/components/product/ProductCard";
@@ -11,19 +18,6 @@ import Header from "@/components/layout/Header";
 import HeroBanner from "@/components/home/HeroBanner";
 import CategoryBar from "@/components/home/CategoryBar";
 import TimeDeal from "@/components/home/TimeDeal";
-
-type SortKey = "recommend" | "price_low" | "price_high" | "review";
-
-function getRating(product: (typeof FLORIDA_PRODUCTS)[number]) {
-  return product.reviews.length ? product.reviews.reduce((acc, cur) => acc + cur.rating, 0) / product.reviews.length : 4.7;
-}
-
-function getRecommendScore(product: (typeof FLORIDA_PRODUCTS)[number]) {
-  const badgeWeight = product.badge === "오늘출발" ? 5 : product.badge === "인기" ? 4 : product.badge === "재입고" ? 3 : 1;
-  const reviewWeight = product.reviews.length;
-  const discountWeight = product.discountRate || 0;
-  return badgeWeight * 10 + reviewWeight * 2 + discountWeight;
-}
 
 export default function FloridaPage() {
   const [wish, setWishState] = useState<Record<string, boolean>>(() => getWish());
@@ -48,28 +42,39 @@ export default function FloridaPage() {
     setCart(next);
   };
 
-  const filteredProducts = useMemo(() => {
-    const keyword = searchKeyword.trim().toLowerCase();
-    const list = FLORIDA_PRODUCTS.filter((p) => {
-      const byCategory = category === "전체" || p.category === category;
-      const byKeyword = !keyword || p.name.toLowerCase().includes(keyword) || p.desc.toLowerCase().includes(keyword);
-      return byCategory && byKeyword;
-    });
+  const filteredProducts = useMemo(
+    () =>
+      filterAndSortProducts(FLORIDA_PRODUCTS, {
+        category,
+        searchKeyword,
+        sort,
+        minPrice: null,
+        maxPrice: null,
+      }),
+    [category, searchKeyword, sort],
+  );
 
-    if (sort === "price_low") return [...list].sort((a, b) => a.price - b.price);
-    if (sort === "price_high") return [...list].sort((a, b) => b.price - a.price);
-    if (sort === "review") return [...list].sort((a, b) => b.reviews.length - a.reviews.length);
-
-    return [...list].sort((a, b) => getRecommendScore(b) - getRecommendScore(a));
-  }, [category, searchKeyword, sort]);
-
-  const topPicks = useMemo(() => [...FLORIDA_PRODUCTS].sort((a, b) => getRecommendScore(b) - getRecommendScore(a)).slice(0, 3), []);
+  const topPicks = useMemo(() => getTopPicks(FLORIDA_PRODUCTS, 3), []);
 
   const applyTimeDealFilter = () => {
     setCategory("영캐주얼");
     setSort("price_low");
     setSearchKeyword("");
   };
+
+  const catalogQuery = useMemo(
+    () =>
+      toCatalogQueryString({
+        category,
+        searchKeyword,
+        sort,
+        minPrice: null,
+        maxPrice: null,
+      }),
+    [category, searchKeyword, sort],
+  );
+
+  const allPageHref = catalogQuery ? `/florida/all?${catalogQuery}` : "/florida/all";
 
   return (
     <main className="min-h-screen bg-[#eef1f4]">
@@ -123,7 +128,7 @@ export default function FloridaPage() {
           <div className="rounded-2xl border border-slate-200 p-3 bg-slate-50">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-extrabold">오늘의 추천 TOP 3</h3>
-              <Link href="/florida/all" className="text-xs text-slate-500">전체보기</Link>
+              <Link href={allPageHref} className="text-xs text-slate-500">전체보기</Link>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2">
               {topPicks.map((p) => (
@@ -149,7 +154,7 @@ export default function FloridaPage() {
           ) : (
             <div className="mt-3 grid grid-cols-2 gap-2">
               {filteredProducts.map((p) => {
-                const rating = getRating(p);
+                const rating = getProductRating(p);
                 return (
                   <ProductCard
                     key={p.id}
