@@ -22,6 +22,10 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 ## 실사용 설계 문서
 
+- Codex 배치 생성 도구(우리동네심부름 템플릿): `scripts/codex_batch_processor.py`
+- 사용 가이드: `scripts/README_codex_batch_ko.md`
+
+
 - 실사용 전환 설계안: `REAL_WORLD_DESIGN.md`
 - 제품 실행 계획(MVP): `PRODUCT_PLAN.md`
 - API 발급/보안 저장 가이드: `API_SETUP_GUIDE.md`

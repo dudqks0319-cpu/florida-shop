@@ -1,0 +1,6 @@
+{
+  "event_type": "proof_uploaded",
+  "core_message": "수행자가 완료 증빙을 업로드했습니다",
+  "cta": "확인하고 승인하기",
+  "tone": "명확하고 친절"
+}
